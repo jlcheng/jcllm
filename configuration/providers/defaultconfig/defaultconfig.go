@@ -1,4 +1,4 @@
-package clienvfile
+package defaultconfig
 
 import (
 	"fmt"
@@ -49,7 +49,7 @@ func New(configMetadata []configuration.Metadata) (configuration.Configuration, 
 
 	f := flag.NewFlagSet("config", flag.ContinueOnError)
 	for _, meta := range configMetadata {
-		f.String(meta.Name, meta.Value, meta.Usage)
+		f.String(meta.Name, meta.DefaultValue, meta.Usage)
 	}
 
 	if err := f.Parse(os.Args[1:]); err != nil {

@@ -201,13 +201,19 @@ type Configuration interface {
 	MustTime(path, layout string) time.Time
 }
 
+// ErrHelp may be returned by ConfigProvider invocation to indicate that the user specified `--help` when invoking the program.
 var ErrHelp = errors.New("flags: help requested")
 
+// Metadata is a definition of a single configuration. Every configuration must have a name, an optional default value, and a usage
+// description.
 type Metadata struct {
-	Name  string
-	Value string
-	Usage string
+	Name         string
+	DefaultValue string
+	Usage        string
 }
 
-// ConfigProvider defines what a New() method which provides Configuration instances should look like
+// ConfigProvider is a function that accepts a list of configuration metadata--definition of parameters that will be used by the program--
+// and returns a Configuration instance.
+//
+// ErrHelp may be returned if the user specified `--help` when invoking the program.
 type ConfigProvider func([]Metadata) (Configuration, error)
