@@ -49,7 +49,12 @@ type (
 
 	ResponseStream struct {
 		Role           string
-		ResponseStream <-chan string
+		ResponseStream <-chan Message
+	}
+
+	Message struct {
+		Text string
+		Err  error
 	}
 )
 
@@ -60,4 +65,6 @@ const (
 )
 
 var ErrNoSupport = errors.New("this model does not support the requested feature")
-var ErrNotFound = errors.New("provider not found")
+var ErrProviderNotFound = errors.New("provider not found")
+var ErrModelNotFound = errors.New("model not found")
+var ErrAPIKeyInvalid = errors.New("api key invalid")

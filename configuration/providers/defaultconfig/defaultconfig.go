@@ -51,7 +51,7 @@ func New(configMetadata []configuration.Metadata) (configuration.Configuration, 
 	for _, meta := range configMetadata {
 		f.String(meta.Name, meta.DefaultValue, meta.Usage)
 	}
-
+	
 	if err := f.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil, configuration.ErrHelp

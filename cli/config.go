@@ -10,5 +10,5 @@ var ConfigMetadata = []configuration.Metadata{
 	{"openai-api-key", "", "OpenAI API Key"},
 	{"gemini-api-key", "", "Gemini API Key"},
 	{"http-timeout", "5", "http timeout in seconds"},
-	{"command", "", "Supported commands are: list-models, list-providers"},
+	{"command", "", "Supported commands are: list-models, list-providers, repl"},
 }

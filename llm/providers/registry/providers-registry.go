@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"jcheng.org/jcllm/configuration"
 	"jcheng.org/jcllm/llm"
-	"jcheng.org/jcllm/llm/providers/genaigo"
+	"jcheng.org/jcllm/llm/providers/gemini"
 )
 
 func NewProvider(ctx context.Context, configuration configuration.Configuration, name string) (llm.ProviderIfc, error) {
 	switch name {
 	case "google":
-		return genaigo.New(ctx, configuration)
+		return gemini.New(ctx, configuration)
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", name)
 	}

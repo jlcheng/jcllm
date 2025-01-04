@@ -7,6 +7,7 @@ import (
 	"jcheng.org/jcllm/configuration"
 	"jcheng.org/jcllm/llm"
 	"jcheng.org/jcllm/llm/providers/registry"
+	"jcheng.org/jcllm/repl"
 	"log"
 )
 
@@ -31,7 +32,7 @@ func (cli *CLI) ListModels() error {
 	name := cli.config.String("provider")
 	provider, err := registry.NewProvider(context.Background(), cli.config, name)
 	if err != nil {
-		if errors.Is(err, llm.ErrNotFound) {
+		if errors.Is(err, llm.ErrProviderNotFound) {
 			log.Fatalf("provider not found: %v", name)
 		}
 		log.Fatalf("cannot instantiate provider [%s]: %v ", name, err)
@@ -49,6 +50,53 @@ func (cli *CLI) ListModels() error {
 	return nil
 }
 
+func (cli *CLI) Send() error {
+	name := cli.config.String("provider")
+	provider, err := registry.NewProvider(context.Background(), cli.config, name)
+	if err != nil {
+		if errors.Is(err, llm.ErrProviderNotFound) {
+			log.Fatalf("provider not found: %v", name)
+		}
+		log.Fatalf("cannot instantiate provider [%s]: %v ", name, err)
+	}
+	model, err := provider.GetModel(context.Background(), cli.config.String("model"))
+	if err != nil {
+		log.Fatalf("cannot get model [%s]: %v", name, err)
+	}
+	chatEntries := make([]llm.ChatEntry, 0)
+	chatEntries = append(chatEntries, llm.ChatEntry{
+		Role: llm.RoleUser,
+		Text: "Describe each of the planets in the 40 Eridani system, according to Project Hail Mary (book).",
+	})
+	resp, err := model.SolicitResponse(context.Background(), llm.Conversation{
+		Model:   cli.config.String("model"),
+		Entries: chatEntries,
+	})
+	if err != nil {
+		log.Fatalf("cannot send message: %v", err)
+	}
+	for elem := range resp.ResponseStream {
+		if elem.Err != nil {
+			log.Fatalf("google api error: %+v", elem.Err)
+		}
+		fmt.Print(elem.Text)
+	}
+	return nil
+}
+
+func (cli *CLI) Repl() error {
+	name := cli.config.String("provider")
+	provider, err := registry.NewProvider(context.Background(), cli.config, name)
+	if err != nil {
+		return errors.WrapPrefix(err, "provider error", 0)
+	}
+
+	if err := repl.Run(cli.config, provider); err != nil {
+		return errors.WrapPrefix(err, "repl error", 0)
+	}
+	return nil
+}
+
 func (cli *CLI) Do() error {
 	switch cli.config.String("command") {
 	case "list-models":
@@ -57,6 +105,14 @@ func (cli *CLI) Do() error {
 		}
 	case "list-providers":
 		if err := cli.ListProviders(); err != nil {
+			return err
+		}
+	case "send":
+		if err := cli.Send(); err != nil {
+			return err
+		}
+	case "repl":
+		if err := cli.Repl(); err != nil {
 			return err
 		}
 	case "":
