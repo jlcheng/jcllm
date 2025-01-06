@@ -4,18 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"github.com/BooleanCat/go-functional/v2/it"
-	"github.com/BooleanCat/go-functional/v2/it/itx"
 	"github.com/go-errors/errors"
 	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"jcheng.org/jcllm/configuration"
 	"jcheng.org/jcllm/llm"
-	"net/http"
 	"slices"
 	"strings"
 )
@@ -34,30 +30,20 @@ type Gemini struct {
 }
 
 type ModelClient struct {
-	config configuration.Configuration
-	client *genai.Client
-	model  string
-}
-
-type GoogleAPIErrorRoot struct {
-	Error GoogleAPIError `json:"error"`
-}
-
-type GoogleAPIError struct {
-	Code    int              `json:"code"`
-	Message string           `json:"message"`
-	Status  string           `json:"status"`
-	Details []map[string]any `json:"details"`
-}
-
-func (errRoot GoogleAPIErrorRoot) IsEmpty() bool {
-	return errRoot.Error.Status == ""
+	config      configuration.Configuration
+	client      *genai.Client
+	model       string
+	chatSession *genai.ChatSession
 }
 
 func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conversation) (llm.ResponseStream, error) {
 	client := g.client.GenerativeModel(g.model)
 	client.SafetySettings = blockCategoriesNone
-	chatSession := client.StartChat()
+	var chatSession = g.chatSession
+	if chatSession == nil {
+		chatSession = client.StartChat()
+		g.chatSession = chatSession
+	}
 	chatSession.History = []*genai.Content{}
 	remoteStream := chatSession.SendMessageStream(ctx, genai.Text(conversation.Entries[len(conversation.Entries)-1].Text))
 	exchange := make(chan llm.Message)
@@ -76,7 +62,7 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 				}
 
 				// Otherwise, map the error from the genai library into something user-friendly
-				exchange <- llm.Message{Err: g.mapStreamReadError(err)}
+				exchange <- llm.Message{Err: mapStreamReadError(err)}
 				break
 			}
 			buf := new(bytes.Buffer)
@@ -97,7 +83,7 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 }
 
 func (g *Gemini) GetModel(_ context.Context, model string) (llm.ModelIfc, error) {
-	return &ModelClient{g.config, g.client, model}, nil
+	return &ModelClient{g.config, g.client, model, nil}, nil
 }
 
 func New(ctx context.Context, config configuration.Configuration) (*Gemini, error) {
@@ -175,45 +161,6 @@ func harmBlockNone() []*genai.SafetySetting {
 			Threshold: genai.HarmBlockNone,
 		}
 	}))
-}
-
-func isModelNotFoundError(gerr *googleapi.Error) bool {
-	return gerr.Code == http.StatusNotFound
-}
-
-func isNotAuthorizedError(gerr *googleapi.Error) bool {
-	errList := unmarshalErrorBody(gerr)
-	_, apiKeyInvalid := itx.FromSlice(errList).Find(func(elem GoogleAPIErrorRoot) bool {
-		_, ok := itx.FromSlice(elem.Error.Details).Find(func(m map[string]any) bool {
-			return m["reason"] == "API_KEY_INVALID"
-		})
-		return ok
-	})
-	return apiKeyInvalid
-}
-
-func unmarshalErrorBody(gerr *googleapi.Error) []GoogleAPIErrorRoot {
-	var errList []GoogleAPIErrorRoot
-	_ = json.Unmarshal([]byte(gerr.Body), &errList)
-	return errList
-}
-
-func (g *ModelClient) mapStreamReadError(err error) error {
-	var gerr *googleapi.Error
-	// If not a googleapi.Error, simply return it
-	if !errors.As(err, &gerr) {
-		return err
-	}
-
-	// Get details out of Google API errors
-	if isModelNotFoundError(gerr) {
-		errorMessage := fmt.Sprintf("model [%s] not found", g.model)
-		return errors.WrapPrefix(llm.ErrModelNotFound, errorMessage, 0)
-	} else if isNotAuthorizedError(gerr) {
-		return llm.ErrAPIKeyInvalid
-	}
-	errMsg := itx.FromSlice([]string{gerr.Message, gerr.Body, gerr.Error()}).Collect()[0]
-	return errors.WrapPrefix(err, errMsg, 0)
 }
 
 var blockCategoriesNone = harmBlockNone()

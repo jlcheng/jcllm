@@ -18,6 +18,7 @@ type (
 
 	// ModelIfc provides an API for interacting with large language models over a web service.
 	ModelIfc interface {
+		RoleMapper
 		SolicitResponse(ctx context.Context, conversation Conversation) (ResponseStream, error)
 	}
 
