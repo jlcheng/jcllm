@@ -11,145 +11,158 @@ import (
 	"time"
 )
 
-// NoOpCmd does nothing, used when the input is an empty line
-type NoOpCmd struct {
-	*ReplContext
-}
-
-func (cmd NoOpCmd) Execute() error {
-	return nil
-}
-
-// QuitCmd will quit the repl
-type QuitCmd struct {
-	*ReplContext
-}
-
-func NewQuitCmd(ctx *ReplContext) *QuitCmd {
-	return &QuitCmd{ReplContext: ctx}
-}
-
-func (cmd QuitCmd) Execute() error {
-	cmd.stopRepl = true
-	return nil
-}
-
-// PrintErrCmd prints the error
-type PrintErrCmd struct {
-	*ReplContext
-	err error
-}
-
-func (cmd PrintErrCmd) Execute() error {
-	fmt.Printf("<Error>%s</Error>\n", strings.TrimRight(cmd.err.Error(), "\n"))
-	cmd.ReplContext.ResetInput()
-	return nil
-}
-
-// AppendCmd appends text the input buffer.
-type AppendCmd struct {
-	*ReplContext
-	line string
-}
-
-func NewAppendCmd(replCtx *ReplContext, text string) *AppendCmd {
-	return &AppendCmd{replCtx, text}
-}
-
-func (cmd AppendCmd) Execute() error {
-	cmd.inputBuffer.WriteString(cmd.line)
-	cmd.inputBuffer.WriteRune('\n')
-	return nil
-}
-
-// SubmitCmd takes the pending input from a multi-line input and submit it to a LLM service for processing.
-type SubmitCmd struct {
-	*ReplContext
-}
-
-func NewSubmitCmd(replCtx *ReplContext) *SubmitCmd {
-	return &SubmitCmd{replCtx}
-}
-
-func (cmd SubmitCmd) Execute() error {
-	stime := time.Now()
-	session := &cmd.ReplContext.session
-	session.Entries = append(session.Entries, llm.ChatEntry{
-		Role: llm.RoleUser,
-		Text: cmd.inputBuffer.String(),
+// NewNoOpCmd creates a command which does nothing, useful when a user mistakenly enters a blank line.
+func NewNoOpCmd() CmdIfc {
+	return NewLambdaCmd(func() error {
+		return nil
 	})
+}
 
-	// Call the LLM REST API
-	resp, err := cmd.client.SolicitResponse(context.Background(), llm.Conversation{
-		Model:   cmd.modelName,
-		Entries: session.Entries,
+// NewQuitCmd creates a command to quit the REPL.
+func NewQuitCmd(replCtx *ReplContext) CmdIfc {
+	return NewLambdaCmd(func() error {
+		replCtx.stopRepl = true
+		return nil
 	})
-	if err != nil {
-		return fmt.Errorf("llm client error: %w", err)
-	}
-	var responseBuffer strings.Builder
+}
 
-	tokens := 0
-	fmt.Printf(fmt.Sprintf("[%s]:\n", cmd.modelName))
-	for elem := range resp.ResponseStream {
-		if elem.Err != nil {
-			if errors.Is(elem.Err, io.EOF) {
-				break
-			}
-			return fmt.Errorf("response stream error: %w", elem.Err)
+// NewPrintErrCmd creates a command which prints the given error.
+func NewPrintErrCmd(replCtx *ReplContext, err error) CmdIfc {
+	return NewLambdaCmd(func() error {
+		if err := replCtx.ResetInput(); err != nil {
+			fmt.Printf("<Error>An error occured when resetting the input buffer: %s</Error>\n", err.Error())
 		}
-		fmt.Print(elem.Text)
-		responseBuffer.WriteString(elem.Text)
-		tokens += elem.TokenCount
-	}
-	elapsedTime := time.Since(stime)
-	tokensPerSec := float64(tokens) / math.Max(1, elapsedTime.Seconds())
-	fmt.Printf("\n[%.2f tokens/s, %.2fs, %d tokens]\n", tokensPerSec, elapsedTime.Seconds(), tokens)
-	session.Entries = append(session.Entries, llm.ChatEntry{
-		Role: llm.RoleAssistant,
-		Text: responseBuffer.String(),
+		fmt.Printf("<Error>%s</Error>\n", strings.TrimRight(err.Error(), "\n"))
+		return nil
 	})
-	cmd.ReplContext.ResetInput()
-	return nil
 }
 
-// ChainCmd chains mulitple commands
-type ChainCmd struct {
-	cmds []CmdIfc
+// NewAppendCmd creates a command which appends the text to the input buffer.
+func NewAppendCmd(replCtx *ReplContext, text string) CmdIfc {
+	return NewLambdaCmd(func() error {
+		replCtx.inputBuffer.WriteString(text)
+		replCtx.inputBuffer.WriteRune('\n')
+		return nil
+	})
 }
 
-func NewChainCmd(commands ...CmdIfc) *ChainCmd {
-	return &ChainCmd{commands}
+// NewSubmitCmd creates a command which takes the pending input and submit it to a LLM for processing.
+func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
+	return NewLambdaCmd(func() error {
+		startTime := time.Now()
+		session := &replCtx.session
+		session.Entries = append(session.Entries, llm.ChatEntry{
+			Role: llm.RoleUser,
+			Text: replCtx.inputBuffer.String(),
+		})
+
+		resp, err := replCtx.client.SolicitResponse(context.Background(), llm.Conversation{
+			Entries: session.Entries,
+		})
+		if err != nil {
+			return fmt.Errorf("llm client error: %w", err)
+		}
+		var responseBuffer strings.Builder
+
+		tokens := 0
+		fmt.Printf("[%s]:\n", replCtx.modelName)
+		for elem := range resp.ResponseStream {
+			if elem.Err != nil {
+				if errors.Is(elem.Err, io.EOF) {
+					break
+				}
+				return fmt.Errorf("response stream error: %w", elem.Err)
+			}
+			// Print out each token as soon as it arrives
+			fmt.Print(elem.Text)
+			responseBuffer.WriteString(elem.Text)
+			tokens += elem.TokenCount
+		}
+		elapsedTime := time.Since(startTime)
+		tokensPerSec := float64(tokens) / math.Max(1, elapsedTime.Seconds())
+		fmt.Printf("\n[%.2f tokens/s, %.2fs, %d tokens]\n", tokensPerSec, elapsedTime.Seconds(), tokens)
+		session.Entries = append(session.Entries, llm.ChatEntry{
+			Role: llm.RoleAssistant,
+			Text: responseBuffer.String(),
+		})
+		if err := replCtx.ResetInput(); err != nil {
+			_ = NewPrintErrCmd(replCtx, err).Execute()
+		}
+		return nil
+	})
 }
 
-func (cmd ChainCmd) Execute() error {
-	for _, cmdIfc := range cmd.cmds {
-		if err := cmdIfc.Execute(); err != nil {
+// NewChainCmd creates a command which runs multiple commands in sequence.
+func NewChainCmd(commands ...CmdIfc) CmdIfc {
+	return NewLambdaCmd(func() error {
+		for _, cmdIfc := range commands {
+			if err := cmdIfc.Execute(); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// NewEnterMultiLineModeCmd creates a command which prepares the REPL for multi-line mode.
+//  1. The prompt is removed (set to empty string).
+//  2. Auto-complete is turned off. A copy of the auto-complete function is stored so it can be re-enabled later.
+func NewEnterMultiLineModeCmd(replCtx *ReplContext) CmdIfc {
+	return NewLambdaCmd(func() error {
+		readline := replCtx.readline
+		readline.SetPrompt(prompts.EmptyPrompt)
+		configCopy := readline.GetConfig()
+		replCtx.completer = configCopy.AutoComplete
+		configCopy.AutoComplete = nil
+		if err := readline.SetConfig(configCopy); err != nil {
 			return err
 		}
+		return nil
+	})
+}
+
+type LambdaCmd struct {
+	executeFunction func() error
+}
+
+func NewLambdaCmd(executeFunction func() error) *LambdaCmd {
+	return &LambdaCmd{executeFunction}
+}
+
+func (cmd *LambdaCmd) Execute() error {
+	return cmd.executeFunction()
+}
+
+// NewSummarizeHistoryCmd creates a command which prints the current conversation.
+func NewSummarizeHistoryCmd(replCtx *ReplContext) CmdIfc {
+	roleToPrefix := func(entry llm.ChatEntry) string {
+		switch entry.Role {
+		case llm.RoleUser:
+			return fmt.Sprintf("%15s", "[User]: ")
+		case llm.RoleAssistant:
+			return fmt.Sprintf("%15s", "[Assistant]: ")
+		default:
+			return "[Unknown]: "
+		}
 	}
-	return nil
-}
-
-// EnterMultiLineModeCmd prepares the REPL for multi-line mode.
-//  1. The prompt is removed (set to empty string).
-//  2. The autocompleter  is stored in the completer member, and the readline autocompleter is turned off.
-type EnterMultiLineModeCmd struct {
-	*ReplContext
-}
-
-func NewEnterMultiLineModeCmd(replCtx *ReplContext) *EnterMultiLineModeCmd {
-	return &EnterMultiLineModeCmd{replCtx}
-}
-
-func (cmd EnterMultiLineModeCmd) Execute() error {
-	readline := cmd.ReplContext.readline
-	readline.SetPrompt(prompts.EmptyPrompt)
-	configCopy := readline.GetConfig()
-	cmd.ReplContext.completer = configCopy.AutoComplete
-	configCopy.AutoComplete = nil
-	if err := readline.SetConfig(configCopy); err != nil {
-		return err
+	summarizeText := func(entry llm.ChatEntry) string {
+		summarized := strings.TrimSpace(entry.Text)
+		summarized = strings.ReplaceAll(summarized, "\n", "¶ ")
+		maxLength := 80
+		suffix := "..."
+		if len(summarized) > maxLength {
+			return summarized[:maxLength-len(suffix)] + suffix
+		}
+		return summarized
 	}
-	return nil
+
+	return NewLambdaCmd(func() error {
+		chatEntries := replCtx.session.Entries
+		fmt.Println("=== Conversation Summary ===")
+		for _, chatEntry := range chatEntries {
+			fmt.Println(roleToPrefix(chatEntry) + " " + summarizeText(chatEntry))
+		}
+		fmt.Println("======= End Summary ========")
+		return nil
+	})
 }

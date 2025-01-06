@@ -69,7 +69,6 @@ func (cli *CLI) Send() error {
 		Text: "Describe each of the planets in the 40 Eridani system, according to Project Hail Mary (book).",
 	})
 	resp, err := model.SolicitResponse(context.Background(), llm.Conversation{
-		Model:   cli.config.String("model"),
 		Entries: chatEntries,
 	})
 	if err != nil {

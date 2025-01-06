@@ -11,7 +11,7 @@ import (
 func NewProvider(ctx context.Context, configuration configuration.Configuration, name string) (llm.ProviderIfc, error) {
 	switch name {
 	case "google":
-		return gemini.New(ctx, configuration)
+		return gemini.NewProvider(ctx, configuration)
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", name)
 	}

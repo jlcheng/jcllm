@@ -24,24 +24,25 @@ type ReplContext struct {
 }
 
 func (replCtx *ReplContext) ParseLine() CmdIfc {
-	var (
-		quitCmd = NewQuitCmd(replCtx)
-	)
-
 	line, err := replCtx.readline.Readline()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return quitCmd
+			return NewQuitCmd(replCtx)
 		} else if err != nil {
-			return PrintErrCmd{replCtx, err}
+			return NewPrintErrCmd(replCtx, err)
 		}
 	}
 	if len(line) == 0 {
-		return NoOpCmd{replCtx}
+		return NewNoOpCmd()
 	}
 
 	if replCtx.inputBuffer.Len() == 0 {
-		// If this is the first line and there is no "multi-line prefix", then submit the input
+		// If this is the first line, handle "/c" commands
+		if strings.TrimSpace(line) == "/c history" {
+			return NewSummarizeHistoryCmd(replCtx)
+		}
+
+		// If this is the first line and there is no multi-line prefix, then submit the input
 		if !strings.HasPrefix(line, MultiLinePrefix) {
 			return NewChainCmd(
 				NewAppendCmd(replCtx, line),
@@ -49,7 +50,7 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 			)
 		}
 
-		// If there the multi-line input prefix was specified, enter multi-line mode append the input
+		// Otherwise, the multi-line prefix was specified, enter multi-line mode before appending the input
 		return NewChainCmd(
 			NewEnterMultiLineModeCmd(replCtx),
 			NewAppendCmd(replCtx, strings.TrimPrefix(line, MultiLinePrefix)),
@@ -62,26 +63,30 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 	return NewAppendCmd(replCtx, line)
 }
 
-func (replCtx *ReplContext) ResetInput() {
+func (replCtx *ReplContext) ResetInput() error {
 	replCtx.inputBuffer.Reset()
 	replCtx.readline.SetPrompt(prompts.FirstLine)
-	fmt.Println("debug: conversation length", len(replCtx.session.Entries))
 	if replCtx.completer != nil {
-		replCtx.readline.GetConfig().AutoComplete = replCtx.completer
+		newConfig := replCtx.readline.GetConfig()
+		newConfig.AutoComplete = replCtx.completer
+		if err := replCtx.readline.SetConfig(newConfig); err != nil {
+			return errors.WrapPrefix(err, "autocomplete reset error", 0)
+		}
 		replCtx.completer = nil
 	}
+	return nil
 }
 
 func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 	var completer = readline.NewPrefixCompleter(
 		// Run commands
-		readline.PcItem("\\c",
+		readline.PcItem("/c",
 			rlCmdCompleter()...,
 		),
 		// Help menu
-		readline.PcItem("\\h"),
+		readline.PcItem("/h"),
 		// Quit this program
-		readline.PcItem("\\q"),
+		readline.PcItem("/q"),
 	)
 	rl, err := readline.NewFromConfig(&readline.Config{
 		AutoComplete:        completer,
@@ -108,7 +113,7 @@ func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 	for !replCtx.stopRepl {
 		cmd := replCtx.ParseLine()
 		if err := cmd.Execute(); err != nil {
-			_ = (&PrintErrCmd{ReplContext: replCtx, err: err}).Execute()
+			_ = NewPrintErrCmd(replCtx, err).Execute()
 		}
 	}
 
@@ -125,7 +130,7 @@ var prompts = struct {
 
 func rlCmdCompleter() []*readline.PrefixCompleter {
 	r := make([]*readline.PrefixCompleter, 0)
-	r = append(r, readline.PcItem("option1"))
+	r = append(r, readline.PcItem("history"))
 	return r
 }
 

@@ -19,6 +19,7 @@ type (
 	// ModelIfc provides an API for interacting with large language models over a web service.
 	ModelIfc interface {
 		RoleMapper
+		ModelName() string
 		SolicitResponse(ctx context.Context, conversation Conversation) (ResponseStream, error)
 	}
 
@@ -31,7 +32,6 @@ type (
 
 type (
 	Conversation struct {
-		Model   string      `json:"model"`
 		Entries []ChatEntry `json:"entries"`
 	}
 

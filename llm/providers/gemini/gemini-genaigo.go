@@ -29,19 +29,38 @@ type Gemini struct {
 	client *genai.Client
 }
 
+func NewProvider(ctx context.Context, config configuration.Configuration) (*Gemini, error) {
+	genaiClient, err := genai.NewClient(ctx, option.WithAPIKey(
+		config.String("gemini-api-key"),
+	))
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize generative-ai-go/genai client: %w", err)
+	}
+
+	return &Gemini{
+		config: config,
+		client: genaiClient,
+	}, nil
+}
+
 type ModelClient struct {
 	config      configuration.Configuration
 	client      *genai.Client
 	model       string
 	chatSession *genai.ChatSession
+	cachedModel *genai.GenerativeModel
 }
 
 func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conversation) (llm.ResponseStream, error) {
-	client := g.client.GenerativeModel(g.model)
-	client.SafetySettings = blockCategoriesNone
+	var generativeModel = g.cachedModel
+	if generativeModel == nil {
+		generativeModel = g.client.GenerativeModel(g.model)
+		generativeModel.SafetySettings = blockCategoriesNone
+		g.cachedModel = generativeModel
+	}
 	var chatSession = g.chatSession
 	if chatSession == nil {
-		chatSession = client.StartChat()
+		chatSession = generativeModel.StartChat()
 		g.chatSession = chatSession
 	}
 	chatSession.History = []*genai.Content{}
@@ -86,21 +105,11 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 }
 
 func (g *Gemini) GetModel(_ context.Context, model string) (llm.ModelIfc, error) {
-	return &ModelClient{g.config, g.client, model, nil}, nil
+	return &ModelClient{config: g.config, client: g.client, model: model, chatSession: nil, cachedModel: nil}, nil
 }
 
-func New(ctx context.Context, config configuration.Configuration) (*Gemini, error) {
-	genaiClient, err := genai.NewClient(ctx, option.WithAPIKey(
-		config.String("gemini-api-key"),
-	))
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize generative-ai-go/genai client: %w", err)
-	}
-
-	return &Gemini{
-		config: config,
-		client: genaiClient,
-	}, nil
+func (g *ModelClient) ModelName() string {
+	return g.model
 }
 
 func (g *ModelClient) ToProviderRole(genericRole string) (providerRole string) {
