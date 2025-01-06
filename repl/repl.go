@@ -65,6 +65,7 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 func (replCtx *ReplContext) ResetInput() {
 	replCtx.inputBuffer.Reset()
 	replCtx.readline.SetPrompt(prompts.FirstLine)
+	fmt.Println("debug: conversation length", len(replCtx.session.Entries))
 	if replCtx.completer != nil {
 		replCtx.readline.GetConfig().AutoComplete = replCtx.completer
 		replCtx.completer = nil
@@ -118,7 +119,7 @@ var prompts = struct {
 	FirstLine   string
 	EmptyPrompt string
 }{
-	FirstLine:   ">>> ",
+	FirstLine:   "[User]: ",
 	EmptyPrompt: "",
 }
 

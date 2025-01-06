@@ -36,4 +36,5 @@ __pycache__
 /gen
 
 # go generated directory
-/dist
+/dist# Added by goreleaser init:
+dist/

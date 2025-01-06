@@ -65,6 +65,9 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 				exchange <- llm.Message{Err: mapStreamReadError(err)}
 				break
 			}
+			if len(respChunk.Candidates) == 0 {
+				continue
+			}
 			buf := new(bytes.Buffer)
 			for _, part := range respChunk.Candidates[0].Content.Parts {
 				switch v := part.(type) {
@@ -76,7 +79,7 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 					buf.WriteString(fmt.Sprintf("(%s)", v.Name))
 				}
 			}
-			exchange <- llm.Message{Text: buf.String()}
+			exchange <- llm.Message{Text: buf.String(), TokenCount: int(respChunk.UsageMetadata.CandidatesTokenCount)}
 		}
 	}()
 	return response, nil

@@ -54,8 +54,9 @@ type (
 	}
 
 	Message struct {
-		Text string
-		Err  error
+		TokenCount int
+		Text       string
+		Err        error
 	}
 )
 

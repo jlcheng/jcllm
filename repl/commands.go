@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"jcheng.org/jcllm/llm"
+	"math"
 	"strings"
 	"time"
 )
@@ -61,20 +62,6 @@ func (cmd AppendCmd) Execute() error {
 	return nil
 }
 
-type ChangePromptCmd struct {
-	*ReplContext
-	prompt string
-}
-
-func NewChangePromptCmd(replCtx *ReplContext, prompt string) *ChangePromptCmd {
-	return &ChangePromptCmd{replCtx, prompt}
-}
-
-func (cmd ChangePromptCmd) Execute() error {
-	cmd.ReplContext.readline.SetPrompt(cmd.prompt)
-	return nil
-}
-
 // SubmitCmd takes the pending input from a multi-line input and submit it to a LLM service for processing.
 type SubmitCmd struct {
 	*ReplContext
@@ -86,7 +73,8 @@ func NewSubmitCmd(replCtx *ReplContext) *SubmitCmd {
 
 func (cmd SubmitCmd) Execute() error {
 	stime := time.Now()
-	cmd.session.Entries = append(cmd.session.Entries, llm.ChatEntry{
+	session := &cmd.ReplContext.session
+	session.Entries = append(session.Entries, llm.ChatEntry{
 		Role: llm.RoleUser,
 		Text: cmd.inputBuffer.String(),
 	})
@@ -94,14 +82,15 @@ func (cmd SubmitCmd) Execute() error {
 	// Call the LLM REST API
 	resp, err := cmd.client.SolicitResponse(context.Background(), llm.Conversation{
 		Model:   cmd.modelName,
-		Entries: cmd.session.Entries,
+		Entries: session.Entries,
 	})
 	if err != nil {
 		return fmt.Errorf("llm client error: %w", err)
 	}
+	var responseBuffer strings.Builder
 
-	// Prints the "[$model/Assistant]" prompt which precedes the LLM response
-	fmt.Printf(fmt.Sprintf("[%s/Assistant]\n", cmd.modelName))
+	tokens := 0
+	fmt.Printf(fmt.Sprintf("[%s]:\n", cmd.modelName))
 	for elem := range resp.ResponseStream {
 		if elem.Err != nil {
 			if errors.Is(elem.Err, io.EOF) {
@@ -110,13 +99,17 @@ func (cmd SubmitCmd) Execute() error {
 			return fmt.Errorf("response stream error: %w", elem.Err)
 		}
 		fmt.Print(elem.Text)
+		responseBuffer.WriteString(elem.Text)
+		tokens += elem.TokenCount
 	}
 	elapsedTime := time.Since(stime)
-	fmt.Println("\nElapsed time:", elapsedTime)
-
-	cmd.inputBuffer.Reset()
-	cmd.readline.SetPrompt(prompts.FirstLine)
-
+	tokensPerSec := float64(tokens) / math.Max(1, elapsedTime.Seconds())
+	fmt.Printf("\n[%.2f tokens/s, %.2fs, %d tokens]\n", tokensPerSec, elapsedTime.Seconds(), tokens)
+	session.Entries = append(session.Entries, llm.ChatEntry{
+		Role: llm.RoleAssistant,
+		Text: responseBuffer.String(),
+	})
+	cmd.ReplContext.ResetInput()
 	return nil
 }
 
