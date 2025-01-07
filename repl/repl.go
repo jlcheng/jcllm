@@ -7,6 +7,7 @@ import (
 	"github.com/go-errors/errors"
 	"io"
 	"jcheng.org/jcllm/configuration"
+	"jcheng.org/jcllm/dye"
 	"jcheng.org/jcllm/llm"
 	"strings"
 )
@@ -65,7 +66,8 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 
 func (replCtx *ReplContext) ResetInput() error {
 	replCtx.inputBuffer.Reset()
-	replCtx.readline.SetPrompt(prompts.FirstLine)
+
+	replCtx.prompt(prompts.FirstLine)
 	if replCtx.completer != nil {
 		newConfig := replCtx.readline.GetConfig()
 		newConfig.AutoComplete = replCtx.completer
@@ -91,7 +93,6 @@ func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 	rl, err := readline.NewFromConfig(&readline.Config{
 		AutoComplete:        completer,
 		FuncFilterInputRune: filterInput,
-		Prompt:              prompts.FirstLine,
 	})
 	if err != nil {
 		return errors.WrapPrefix(err, "failed to create readline", 0)
@@ -109,6 +110,7 @@ func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 		readline:    rl,
 		modelName:   modelName,
 	}
+	replCtx.prompt(prompts.FirstLine)
 
 	for !replCtx.stopRepl {
 		cmd := replCtx.ParseLine()
@@ -126,6 +128,12 @@ var prompts = struct {
 }{
 	FirstLine:   "[User]: ",
 	EmptyPrompt: "",
+}
+
+func (replCtx *ReplContext) prompt(newPrompt string) {
+	if newPrompt == prompts.FirstLine {
+		replCtx.readline.SetPrompt(dye.Str(newPrompt).Bold().Green())
+	}
 }
 
 func rlCmdCompleter() []*readline.PrefixCompleter {

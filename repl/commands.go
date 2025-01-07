@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"jcheng.org/jcllm/dye"
 	"jcheng.org/jcllm/llm"
 	"math"
 	"strings"
@@ -65,7 +66,7 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 		var responseBuffer strings.Builder
 
 		tokens := 0
-		fmt.Printf("[%s]:\n", replCtx.modelName)
+		fmt.Println(dye.Strf("[%s]:", replCtx.modelName).Bold().Yellow())
 		for elem := range resp.ResponseStream {
 			if elem.Err != nil {
 				if errors.Is(elem.Err, io.EOF) {
@@ -110,7 +111,7 @@ func NewChainCmd(commands ...CmdIfc) CmdIfc {
 func NewEnterMultiLineModeCmd(replCtx *ReplContext) CmdIfc {
 	return NewLambdaCmd(func() error {
 		readline := replCtx.readline
-		readline.SetPrompt(prompts.EmptyPrompt)
+		replCtx.prompt(prompts.EmptyPrompt)
 		configCopy := readline.GetConfig()
 		replCtx.completer = configCopy.AutoComplete
 		configCopy.AutoComplete = nil
