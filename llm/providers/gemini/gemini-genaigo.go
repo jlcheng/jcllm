@@ -63,8 +63,9 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 		chatSession = generativeModel.StartChat()
 		g.chatSession = chatSession
 	}
-	chatSession.History = []*genai.Content{}
-	remoteStream := chatSession.SendMessageStream(ctx, genai.Text(conversation.Entries[len(conversation.Entries)-1].Text))
+	history, lastEntry := extractLast(conversation)
+	chatSession.History = slices.Collect(it.Map(slices.Values(history), g.toContent))
+	remoteStream := chatSession.SendMessageStream(ctx, g.toContent(lastEntry).Parts...)
 	exchange := make(chan llm.Message)
 	response := llm.ResponseStream{
 		Role:           g.ToGenericRole(RoleModel),
@@ -158,6 +159,21 @@ func (g *Gemini) ListModels(ctx context.Context) ([]llm.ModelInfo, error) {
 		})
 	}
 	return results, nil
+}
+
+func (g *ModelClient) toContent(entry llm.ChatEntry) *genai.Content {
+	content := &genai.Content{
+		Parts: []genai.Part{
+			genai.Text(entry.Text),
+		},
+		Role: g.ToProviderRole(entry.Role),
+	}
+	return content
+}
+
+// The gen-ai-go API requires the last entry of a conversation to be submitted on its own
+func extractLast(conversation llm.Conversation) ([]llm.ChatEntry, llm.ChatEntry) {
+	return conversation.Entries[:len(conversation.Entries)-1], conversation.Entries[len(conversation.Entries)-1]
 }
 
 func harmBlockNone() []*genai.SafetySetting {

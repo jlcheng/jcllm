@@ -42,6 +42,9 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 		if strings.TrimSpace(line) == "/c history" {
 			return NewSummarizeHistoryCmd(replCtx)
 		}
+		if strings.TrimSpace(line) == "/c clear" {
+			return NewClearConversationCommand(replCtx)
+		}
 
 		// If this is the first line and there is no multi-line prefix, then submit the input
 		if !strings.HasPrefix(line, MultiLinePrefix) {
@@ -139,6 +142,7 @@ func (replCtx *ReplContext) prompt(newPrompt string) {
 func rlCmdCompleter() []*readline.PrefixCompleter {
 	r := make([]*readline.PrefixCompleter, 0)
 	r = append(r, readline.PcItem("history"))
+	r = append(r, readline.PcItem("clear"))
 	return r
 }
 

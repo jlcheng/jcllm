@@ -167,3 +167,12 @@ func NewSummarizeHistoryCmd(replCtx *ReplContext) CmdIfc {
 		return nil
 	})
 }
+
+func NewClearConversationCommand(replCtx *ReplContext) CmdIfc {
+	return NewLambdaCmd(func() error {
+		replCtx.session.Entries = replCtx.session.Entries[:0]
+		fmt.Println(dye.Str("[Current conversation cleared]").Bold().Yellow())
+		replCtx.ResetInput()
+		return nil
+	})
+}
