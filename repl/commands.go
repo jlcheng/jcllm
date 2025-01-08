@@ -12,6 +12,13 @@ import (
 	"time"
 )
 
+type (
+	// CmdIfc is the interface of a command object
+	CmdIfc interface {
+		Execute() error
+	}
+)
+
 // NewNoOpCmd creates a command which does nothing, useful when a user mistakenly enters a blank line.
 func NewNoOpCmd() CmdIfc {
 	return NewLambdaCmd(func() error {
@@ -87,7 +94,7 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			Text: responseBuffer.String(),
 		})
 		if err := replCtx.ResetInput(); err != nil {
-			_ = NewPrintErrCmd(replCtx, err).Execute()
+			return fmt.Errorf("input reset error: %w", err)
 		}
 		return nil
 	})
@@ -172,7 +179,9 @@ func NewClearConversationCommand(replCtx *ReplContext) CmdIfc {
 	return NewLambdaCmd(func() error {
 		replCtx.session.Entries = replCtx.session.Entries[:0]
 		fmt.Println(dye.Str("[Current conversation cleared]").Bold().Yellow())
-		replCtx.ResetInput()
+		if err := replCtx.ResetInput(); err != nil {
+			return err
+		}
 		return nil
 	})
 }

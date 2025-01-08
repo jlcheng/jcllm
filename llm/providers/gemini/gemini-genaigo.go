@@ -64,6 +64,7 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 		g.chatSession = chatSession
 	}
 	history, lastEntry := extractLast(conversation)
+	lastEntry.Text = fmt.Sprintf("<system-prompt>%s</system-prompt>\n", g.config.Get("system-prompt"), lastEntry.Text)
 	chatSession.History = slices.Collect(it.Map(slices.Values(history), g.toContent))
 	remoteStream := chatSession.SendMessageStream(ctx, g.toContent(lastEntry).Parts...)
 	exchange := make(chan llm.Message)

@@ -25,6 +25,7 @@ type ReplContext struct {
 }
 
 func (replCtx *ReplContext) ParseLine() CmdIfc {
+	slashCommandParser := NewSlashCommandParser(replCtx)
 	line, err := replCtx.readline.Readline()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -38,12 +39,9 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 	}
 
 	if replCtx.inputBuffer.Len() == 0 {
-		// If this is the first line, handle "/c" commands
-		if strings.TrimSpace(line) == "/c history" {
-			return NewSummarizeHistoryCmd(replCtx)
-		}
-		if strings.TrimSpace(line) == "/c clear" {
-			return NewClearConversationCommand(replCtx)
+		// If this is the first line, try to parse it with the slashCommandParser
+		if cmd := slashCommandParser.Parse(line); cmd != nil {
+			return cmd
 		}
 
 		// If this is the first line and there is no multi-line prefix, then submit the input
@@ -135,8 +133,9 @@ var prompts = struct {
 
 func (replCtx *ReplContext) prompt(newPrompt string) {
 	if newPrompt == prompts.FirstLine {
-		replCtx.readline.SetPrompt(dye.Str(newPrompt).Bold().Green())
+		newPrompt = dye.Str(newPrompt).Bold().Green()
 	}
+	replCtx.readline.SetPrompt(newPrompt)
 }
 
 func rlCmdCompleter() []*readline.PrefixCompleter {
@@ -154,10 +153,3 @@ func filterInput(r rune) (rune, bool) {
 	}
 	return r, true
 }
-
-type (
-	// CmdIfc is the interface of a command object
-	CmdIfc interface {
-		Execute() error
-	}
-)
