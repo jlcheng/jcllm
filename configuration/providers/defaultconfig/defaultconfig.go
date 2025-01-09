@@ -1,7 +1,6 @@
 package defaultconfig
 
 import (
-	"fmt"
 	"github.com/go-errors/errors"
 	"jcheng.org/jcllm/configuration"
 	"log"
@@ -32,14 +31,6 @@ func New(configMetadata []configuration.Metadata) (configuration.Configuration, 
 		}
 	}
 
-	envPrefix := "JCLLM"
-	envKeys := []string{"provider", "openai-api-key", "model"}
-	envVars := make([]string, 0, len(envKeys))
-	for _, key := range envKeys {
-		envVar := fmt.Sprintf("%s_%s", envPrefix, strings.ReplaceAll(strings.ToUpper(key), "-", "_"))
-		envVars = append(envVars, envVar)
-	}
-
 	if err := k.Load(env.Provider("JCLLM_", ".", func(s string) string {
 		return strings.Replace(strings.ToLower(
 			strings.TrimPrefix(s, "JCLLM_")), "_", "-", -1)
@@ -51,7 +42,7 @@ func New(configMetadata []configuration.Metadata) (configuration.Configuration, 
 	for _, meta := range configMetadata {
 		f.String(meta.Name, meta.DefaultValue, meta.Usage)
 	}
-	
+
 	if err := f.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil, configuration.ErrHelp

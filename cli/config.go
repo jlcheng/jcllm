@@ -2,13 +2,13 @@ package cli
 
 import (
 	"jcheng.org/jcllm/configuration"
+	"jcheng.org/jcllm/configuration/keys"
 )
 
 var ConfigMetadata = []configuration.Metadata{
-	{"provider", "openai", "provider name"},
-	{"model", "gpt-4o-mini", "model name"},
-	{"openai-api-key", "", "OpenAI API Key"},
-	{"gemini-api-key", "", "Gemini API Key"},
-	{"http-timeout", "5", "http timeout in seconds"},
-	{"command", "", "Supported commands are: list-models, list-providers, repl"},
+	{keys.OptionProvider, keys.ProviderGemini, "provider name"},
+	{keys.OptionModel, "gemini-1.5-flash-8b", "model name"},
+	{keys.OptionGeminiApiKey, "", "Gemini API Key"},
+	{keys.OptionCommand, "repl", "Supported commands are: list-models, list-providers, repl"},
+	{keys.OptionSystemPrompt, "You are an AI assistant. Be concise.", "System prompt"},
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/go-errors/errors"
 	"jcheng.org/jcllm/configuration"
+	"jcheng.org/jcllm/configuration/keys"
 	"jcheng.org/jcllm/llm"
 	"jcheng.org/jcllm/llm/providers/registry"
 	"jcheng.org/jcllm/repl"
@@ -20,7 +21,7 @@ func New(config configuration.Configuration) *CLI {
 }
 
 func (cli *CLI) ListProviders() error {
-	providers := []string{"google"}
+	providers := []string{keys.ProviderGemini}
 	fmt.Println("Supported providers:")
 	for _, provider := range providers {
 		fmt.Println(provider)
@@ -29,7 +30,7 @@ func (cli *CLI) ListProviders() error {
 }
 
 func (cli *CLI) ListModels() error {
-	name := cli.config.String("provider")
+	name := cli.config.String(keys.OptionProvider)
 	provider, err := registry.NewProvider(context.Background(), cli.config, name)
 	if err != nil {
 		if errors.Is(err, llm.ErrProviderNotFound) {
@@ -50,41 +51,8 @@ func (cli *CLI) ListModels() error {
 	return nil
 }
 
-func (cli *CLI) Send() error {
-	name := cli.config.String("provider")
-	provider, err := registry.NewProvider(context.Background(), cli.config, name)
-	if err != nil {
-		if errors.Is(err, llm.ErrProviderNotFound) {
-			log.Fatalf("provider not found: %v", name)
-		}
-		log.Fatalf("cannot instantiate provider [%s]: %v ", name, err)
-	}
-	model, err := provider.GetModel(context.Background(), cli.config.String("model"))
-	if err != nil {
-		log.Fatalf("cannot get model [%s]: %v", name, err)
-	}
-	chatEntries := make([]llm.ChatEntry, 0)
-	chatEntries = append(chatEntries, llm.ChatEntry{
-		Role: llm.RoleUser,
-		Text: "Describe each of the planets in the 40 Eridani system, according to Project Hail Mary (book).",
-	})
-	resp, err := model.SolicitResponse(context.Background(), llm.Conversation{
-		Entries: chatEntries,
-	})
-	if err != nil {
-		log.Fatalf("cannot send message: %v", err)
-	}
-	for elem := range resp.ResponseStream {
-		if elem.Err != nil {
-			log.Fatalf("google api error: %+v", elem.Err)
-		}
-		fmt.Print(elem.Text)
-	}
-	return nil
-}
-
 func (cli *CLI) Repl() error {
-	name := cli.config.String("provider")
+	name := cli.config.String(keys.OptionProvider)
 	provider, err := registry.NewProvider(context.Background(), cli.config, name)
 	if err != nil {
 		return errors.WrapPrefix(err, "provider error", 0)
@@ -97,7 +65,8 @@ func (cli *CLI) Repl() error {
 }
 
 func (cli *CLI) Do() error {
-	switch cli.config.String("command") {
+	command := cli.config.String(keys.OptionCommand)
+	switch command {
 	case "list-models":
 		if err := cli.ListModels(); err != nil {
 			return err
@@ -106,18 +75,14 @@ func (cli *CLI) Do() error {
 		if err := cli.ListProviders(); err != nil {
 			return err
 		}
-	case "send":
-		if err := cli.Send(); err != nil {
-			return err
-		}
 	case "repl":
 		if err := cli.Repl(); err != nil {
 			return err
 		}
 	case "":
-		return fmt.Errorf("command not specified")
+		return fmt.Errorf("no command specified")
 	default:
-		return fmt.Errorf("unknown command: %s", cli.config.String("command"))
+		return fmt.Errorf("unknown command: %s", command)
 	}
 	return nil
 }

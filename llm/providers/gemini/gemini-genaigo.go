@@ -11,6 +11,7 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 	"jcheng.org/jcllm/configuration"
+	"jcheng.org/jcllm/configuration/keys"
 	"jcheng.org/jcllm/llm"
 	"slices"
 	"strings"
@@ -31,7 +32,7 @@ type Gemini struct {
 
 func NewProvider(ctx context.Context, config configuration.Configuration) (*Gemini, error) {
 	genaiClient, err := genai.NewClient(ctx, option.WithAPIKey(
-		config.String("gemini-api-key"),
+		config.String(keys.OptionGeminiApiKey),
 	))
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize generative-ai-go/genai client: %w", err)
@@ -44,27 +45,16 @@ func NewProvider(ctx context.Context, config configuration.Configuration) (*Gemi
 }
 
 type ModelClient struct {
-	config      configuration.Configuration
-	client      *genai.Client
-	model       string
-	chatSession *genai.ChatSession
-	cachedModel *genai.GenerativeModel
+	config            configuration.Configuration
+	client            *genai.Client
+	model             string
+	cachedChatSession *genai.ChatSession
+	cachedModel       *genai.GenerativeModel
 }
 
 func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conversation) (llm.ResponseStream, error) {
-	var generativeModel = g.cachedModel
-	if generativeModel == nil {
-		generativeModel = g.client.GenerativeModel(g.model)
-		generativeModel.SafetySettings = blockCategoriesNone
-		g.cachedModel = generativeModel
-	}
-	var chatSession = g.chatSession
-	if chatSession == nil {
-		chatSession = generativeModel.StartChat()
-		g.chatSession = chatSession
-	}
+	var chatSession = g.chatSession()
 	history, lastEntry := extractLast(conversation)
-	lastEntry.Text = fmt.Sprintf("<system-prompt>%s</system-prompt>\n", g.config.Get("system-prompt"), lastEntry.Text)
 	chatSession.History = slices.Collect(it.Map(slices.Values(history), g.toContent))
 	remoteStream := chatSession.SendMessageStream(ctx, g.toContent(lastEntry).Parts...)
 	exchange := make(chan llm.Message)
@@ -107,7 +97,7 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 }
 
 func (g *Gemini) GetModel(_ context.Context, model string) (llm.ModelIfc, error) {
-	return &ModelClient{config: g.config, client: g.client, model: model, chatSession: nil, cachedModel: nil}, nil
+	return &ModelClient{config: g.config, client: g.client, model: model, cachedChatSession: nil, cachedModel: nil}, nil
 }
 
 func (g *ModelClient) ModelName() string {
@@ -175,6 +165,26 @@ func (g *ModelClient) toContent(entry llm.ChatEntry) *genai.Content {
 // The gen-ai-go API requires the last entry of a conversation to be submitted on its own
 func extractLast(conversation llm.Conversation) ([]llm.ChatEntry, llm.ChatEntry) {
 	return conversation.Entries[:len(conversation.Entries)-1], conversation.Entries[len(conversation.Entries)-1]
+}
+
+func (g *ModelClient) chatSession() *genai.ChatSession {
+	if g.cachedChatSession == nil {
+		generativeModel := g.generativeModel()
+		g.cachedChatSession = generativeModel.StartChat()
+	}
+	return g.cachedChatSession
+}
+
+func (g *ModelClient) generativeModel() *genai.GenerativeModel {
+	if g.cachedModel == nil {
+		generativeModel := g.client.GenerativeModel(g.model)
+		generativeModel.SafetySettings = harmBlockNone()
+		generativeModel.SystemInstruction = &genai.Content{
+			Parts: []genai.Part{genai.Text(g.config.String(keys.OptionSystemPrompt))},
+		}
+		g.cachedModel = generativeModel
+	}
+	return g.cachedModel
 }
 
 func harmBlockNone() []*genai.SafetySetting {

@@ -7,6 +7,7 @@ import (
 	"github.com/go-errors/errors"
 	"io"
 	"jcheng.org/jcllm/configuration"
+	"jcheng.org/jcllm/configuration/keys"
 	"jcheng.org/jcllm/dye"
 	"jcheng.org/jcllm/llm"
 	"strings"
@@ -99,7 +100,7 @@ func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 		return errors.WrapPrefix(err, "failed to create readline", 0)
 	}
 
-	modelName := config.String("model")
+	modelName := config.String(keys.OptionModel)
 	model, err := provider.GetModel(context.Background(), modelName)
 	if err != nil {
 		return errors.WrapPrefix(err, fmt.Sprintf("failed to load model [%s]", modelName), 0)
