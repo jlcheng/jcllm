@@ -64,7 +64,7 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			Text: replCtx.inputBuffer.String(),
 		})
 
-		resp, err := replCtx.client.SolicitResponse(context.Background(), llm.Conversation{
+		resp, err := replCtx.model.SolicitResponse(context.Background(), llm.Conversation{
 			Entries: session.Entries,
 		})
 		if err != nil {

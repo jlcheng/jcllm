@@ -8,16 +8,20 @@ import (
 	"jcheng.org/jcllm/configuration/keys"
 	"jcheng.org/jcllm/llm"
 	"jcheng.org/jcllm/llm/providers/registry"
+	"jcheng.org/jcllm/log"
 	"jcheng.org/jcllm/repl"
-	"log"
 )
 
 type CLI struct {
 	config configuration.Configuration
+	logger *log.Logger
 }
 
 func New(config configuration.Configuration) *CLI {
-	return &CLI{config: config}
+	return &CLI{
+		config: config,
+		logger: log.New(config.String(keys.OptionLogFile)),
+	}
 }
 
 func (cli *CLI) ListProviders() error {
@@ -33,13 +37,16 @@ func (cli *CLI) ListModels() error {
 	name := cli.config.String(keys.OptionProvider)
 	provider, err := registry.NewProvider(context.Background(), cli.config, name)
 	if err != nil {
+		cli.logger.Errorf("cannot instantiate provider [%s]: %v", name, err)
 		if errors.Is(err, llm.ErrProviderNotFound) {
-			log.Fatalf("provider not found: %v", name)
+			fmt.Printf("provider not found: %v\n", name)
+			return nil
 		}
-		log.Fatalf("cannot instantiate provider [%s]: %v ", name, err)
+		return errors.WrapPrefix(err, fmt.Sprintf("cannot instantiate provider [%s]", name), 0)
 	}
 	models, err := provider.ListModels(context.Background())
 	if err != nil {
+		cli.logger.Errorf("cannot list models: %v", err)
 		return errors.Errorf("cannot list models: %v", err)
 	}
 	for _, model := range models {
@@ -69,14 +76,17 @@ func (cli *CLI) Do() error {
 	switch command {
 	case "list-models":
 		if err := cli.ListModels(); err != nil {
+			cli.logger.Errorf("cannot list models: %v", err)
 			return err
 		}
 	case "list-providers":
 		if err := cli.ListProviders(); err != nil {
+			cli.logger.Errorf("cannot list providers: %v", err)
 			return err
 		}
 	case "repl":
 		if err := cli.Repl(); err != nil {
+			cli.logger.Errorf("cannot start repl: %v", err)
 			return err
 		}
 	case "":

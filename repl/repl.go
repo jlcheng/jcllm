@@ -10,19 +10,63 @@ import (
 	"jcheng.org/jcllm/configuration/keys"
 	"jcheng.org/jcllm/dye"
 	"jcheng.org/jcllm/llm"
+	"jcheng.org/jcllm/log"
 	"strings"
 )
 
 const MultiLinePrefix = "..."
 
 type ReplContext struct {
+	config      configuration.Configuration
+	logger      *log.Logger
 	stopRepl    bool
 	inputBuffer *strings.Builder
+	provider    llm.ProviderIfc
 	modelName   string
-	client      llm.ModelIfc
+	model       llm.ModelIfc
 	session     llm.Conversation
 	readline    *readline.Instance
 	completer   readline.AutoCompleter
+}
+
+func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplContext, error) {
+	replCtx := &ReplContext{
+		stopRepl:    false,
+		inputBuffer: new(strings.Builder),
+		config:      config,
+		provider:    provider,
+		logger:      log.New(config.String(keys.OptionLogFile)),
+	}
+
+	var completer = readline.NewPrefixCompleter(
+		// Run commands
+		readline.PcItem("/c",
+			rlCmdCompleter()...,
+		),
+		// Help menu
+		readline.PcItem("/h"),
+		// Quit this program
+		readline.PcItem("/q"),
+	)
+	readlineInstance, err := readline.NewFromConfig(&readline.Config{
+		AutoComplete:        completer,
+		FuncFilterInputRune: filterInput,
+	})
+	if err != nil {
+		return nil, errors.WrapPrefix(err, "failed to create readline", 0)
+	}
+	replCtx.readline = readlineInstance
+	return replCtx, nil
+}
+
+func (replCtx *ReplContext) SetModel(modelName string) error {
+	model, err := replCtx.provider.GetModel(context.Background(), modelName)
+	if err != nil {
+		return err
+	}
+	replCtx.model = model
+	replCtx.modelName = modelName
+	return nil
 }
 
 func (replCtx *ReplContext) ParseLine() CmdIfc {
@@ -82,37 +126,15 @@ func (replCtx *ReplContext) ResetInput() error {
 }
 
 func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
-	var completer = readline.NewPrefixCompleter(
-		// Run commands
-		readline.PcItem("/c",
-			rlCmdCompleter()...,
-		),
-		// Help menu
-		readline.PcItem("/h"),
-		// Quit this program
-		readline.PcItem("/q"),
-	)
-	rl, err := readline.NewFromConfig(&readline.Config{
-		AutoComplete:        completer,
-		FuncFilterInputRune: filterInput,
-	})
+	replCtx, err := New(config, provider)
 	if err != nil {
-		return errors.WrapPrefix(err, "failed to create readline", 0)
-	}
-
-	modelName := config.String(keys.OptionModel)
-	model, err := provider.GetModel(context.Background(), modelName)
-	if err != nil {
-		return errors.WrapPrefix(err, fmt.Sprintf("failed to load model [%s]", modelName), 0)
-	}
-	replCtx := &ReplContext{
-		inputBuffer: new(strings.Builder),
-		client:      model,
-		session:     llm.Conversation{},
-		readline:    rl,
-		modelName:   modelName,
+		return errors.WrapPrefix(err, "failed to create replCtx", 0)
 	}
 	replCtx.prompt(prompts.FirstLine)
+	modelName := config.String(keys.OptionModel)
+	if err := replCtx.SetModel(modelName); err != nil {
+		return errors.WrapPrefix(err, fmt.Sprintf("failed to set model [%s]", modelName), 0)
+	}
 
 	for !replCtx.stopRepl {
 		cmd := replCtx.ParseLine()

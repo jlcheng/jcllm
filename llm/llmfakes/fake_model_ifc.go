@@ -9,6 +9,16 @@ import (
 )
 
 type FakeModelIfc struct {
+	ModelNameStub        func() string
+	modelNameMutex       sync.RWMutex
+	modelNameArgsForCall []struct {
+	}
+	modelNameReturns struct {
+		result1 string
+	}
+	modelNameReturnsOnCall map[int]struct {
+		result1 string
+	}
 	SolicitResponseStub        func(context.Context, llm.Conversation) (llm.ResponseStream, error)
 	solicitResponseMutex       sync.RWMutex
 	solicitResponseArgsForCall []struct {
@@ -47,6 +57,59 @@ type FakeModelIfc struct {
 	}
 	invocations      map[string][][]interface{}
 	invocationsMutex sync.RWMutex
+}
+
+func (fake *FakeModelIfc) ModelName() string {
+	fake.modelNameMutex.Lock()
+	ret, specificReturn := fake.modelNameReturnsOnCall[len(fake.modelNameArgsForCall)]
+	fake.modelNameArgsForCall = append(fake.modelNameArgsForCall, struct {
+	}{})
+	stub := fake.ModelNameStub
+	fakeReturns := fake.modelNameReturns
+	fake.recordInvocation("ModelName", []interface{}{})
+	fake.modelNameMutex.Unlock()
+	if stub != nil {
+		return stub()
+	}
+	if specificReturn {
+		return ret.result1
+	}
+	return fakeReturns.result1
+}
+
+func (fake *FakeModelIfc) ModelNameCallCount() int {
+	fake.modelNameMutex.RLock()
+	defer fake.modelNameMutex.RUnlock()
+	return len(fake.modelNameArgsForCall)
+}
+
+func (fake *FakeModelIfc) ModelNameCalls(stub func() string) {
+	fake.modelNameMutex.Lock()
+	defer fake.modelNameMutex.Unlock()
+	fake.ModelNameStub = stub
+}
+
+func (fake *FakeModelIfc) ModelNameReturns(result1 string) {
+	fake.modelNameMutex.Lock()
+	defer fake.modelNameMutex.Unlock()
+	fake.ModelNameStub = nil
+	fake.modelNameReturns = struct {
+		result1 string
+	}{result1}
+}
+
+func (fake *FakeModelIfc) ModelNameReturnsOnCall(i int, result1 string) {
+	fake.modelNameMutex.Lock()
+	defer fake.modelNameMutex.Unlock()
+	fake.ModelNameStub = nil
+	if fake.modelNameReturnsOnCall == nil {
+		fake.modelNameReturnsOnCall = make(map[int]struct {
+			result1 string
+		})
+	}
+	fake.modelNameReturnsOnCall[i] = struct {
+		result1 string
+	}{result1}
 }
 
 func (fake *FakeModelIfc) SolicitResponse(arg1 context.Context, arg2 llm.Conversation) (llm.ResponseStream, error) {
@@ -239,6 +302,8 @@ func (fake *FakeModelIfc) ToProviderRoleReturnsOnCall(i int, result1 string) {
 func (fake *FakeModelIfc) Invocations() map[string][][]interface{} {
 	fake.invocationsMutex.RLock()
 	defer fake.invocationsMutex.RUnlock()
+	fake.modelNameMutex.RLock()
+	defer fake.modelNameMutex.RUnlock()
 	fake.solicitResponseMutex.RLock()
 	defer fake.solicitResponseMutex.RUnlock()
 	fake.toGenericRoleMutex.RLock()
