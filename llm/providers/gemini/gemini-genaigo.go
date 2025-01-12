@@ -86,8 +86,16 @@ func (g *ModelClient) SolicitResponse(ctx context.Context, conversation llm.Conv
 					buf.WriteString(string(v))
 				case genai.Blob:
 					buf.WriteString(base64.StdEncoding.EncodeToString(v.Data))
+				case genai.FunctionCall:
+					buf.WriteString(fmt.Sprintf("(function-call %s)\n", v.Name))
 				case genai.FunctionResponse:
-					buf.WriteString(fmt.Sprintf("(%s)", v.Name))
+					buf.WriteString(fmt.Sprintf("(function-response %s)\n", v.Name))
+				case genai.ExecutableCode:
+					buf.WriteString(fmt.Sprintf("(executable-code %s %s)\n", v.Code, v.Language))
+				case genai.CodeExecutionResult:
+					buf.WriteString(fmt.Sprintf("(code-execution-result %s)\n", v.Output))
+				default:
+					buf.WriteString(fmt.Sprintf("(unknown type %T)\n", v))
 				}
 			}
 			exchange <- llm.Message{Text: buf.String(), TokenCount: int(respChunk.UsageMetadata.CandidatesTokenCount)}
