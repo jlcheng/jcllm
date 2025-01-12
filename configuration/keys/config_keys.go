@@ -8,4 +8,5 @@ const (
 	OptionProvider     = "provider"
 	OptionSystemPrompt = "system-prompt"
 	ProviderGemini     = "gemini"
+	ProviderGoogleAI   = "google-ai"
 )
