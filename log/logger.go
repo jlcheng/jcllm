@@ -54,9 +54,6 @@ func (w fakeWriter) Write(p []byte) (n int, err error) {
 }
 
 func (logger *Logger) Errorf(format string, v ...interface{}) {
-	if logger.file == "" {
-		return
-	}
 	writer, errGetLogger := logger.fout()
 	if errGetLogger != nil {
 		return
