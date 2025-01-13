@@ -172,7 +172,7 @@ func (m *Model) SolicitResponse(ctx context.Context, conversation llm.Conversati
 				}
 			}
 			exchange <- llm.Message{
-				TokenCount: int(chunk.UsageMetadata.CandidatesTokenCount),
+				TokenCount: getTokenCount(chunk),
 				Text:       buf.String(),
 				Err:        nil,
 			}
@@ -190,6 +190,13 @@ func (m *Model) isGroundingEnabled(conversation llm.Conversation) bool {
 	lastEntry := conversation.Entries[len(conversation.Entries)-1]
 	text := strings.ToLower(lastEntry.Text)
 	return strings.Contains(text, "use grounding")
+}
+
+func getTokenCount(chunk *genai.GenerateContentResponse) int {
+	if chunk == nil || chunk.UsageMetadata == nil {
+		return 0
+	}
+	return int(chunk.UsageMetadata.CandidatesTokenCount)
 }
 
 func mapToText(part *genai.Part) (string, bool) {
