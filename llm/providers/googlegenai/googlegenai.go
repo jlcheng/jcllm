@@ -3,15 +3,19 @@ package googlegenai
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/BooleanCat/go-functional/v2/it"
 	"github.com/go-errors/errors"
 	"google.golang.org/genai"
+	"io"
 	"jcheng.org/jcllm/configuration"
 	"jcheng.org/jcllm/configuration/keys"
 	"jcheng.org/jcllm/llm"
 	"jcheng.org/jcllm/log"
+	"net/http"
 	"slices"
+	"strings"
 )
 
 const (
@@ -36,7 +40,31 @@ func NewProvider(config configuration.Configuration) *Provider {
 }
 
 func (p *Provider) ListModels(_ context.Context) ([]llm.ModelInfo, error) {
-	return nil, llm.ErrNoSupport
+	listModelURL := "https://generativelanguage.googleapis.com/v1beta/models"
+	resp, err := http.Get(fmt.Sprintf("%s?key=%s", listModelURL, p.config.String(keys.OptionGeminiApiKey)))
+	if err != nil {
+		return nil, errors.WrapPrefix(err, "error getting model list", 0)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.WrapPrefix(err, "error reading list-models response", 0)
+	}
+	var listModelsOutput ListModelsOutput
+	if err := json.Unmarshal(body, &listModelsOutput); err != nil {
+		return nil, errors.WrapPrefix(err, "json parse error", 0)
+	}
+	modelsList := slices.Collect(
+		it.Map(slices.Values(listModelsOutput.Models), func(model ModelInfo) llm.ModelInfo {
+			return llm.ModelInfo{
+				DisplayName: model.DisplayName,
+				Name:        model.Name,
+				Description: model.Description,
+				MaxTokens:   model.MaxTokens,
+				Version:     model.Version,
+			}
+		}),
+	)
+	return modelsList, nil
 }
 
 func (p *Provider) GetModel(ctx context.Context, modelName string) (llm.ModelIfc, error) {
@@ -96,80 +124,97 @@ func (m *Model) ModelName() string {
 }
 
 func (m *Model) SolicitResponse(ctx context.Context, conversation llm.Conversation) (llm.ResponseStream, error) {
-	history, lastEntry := extractLast(conversation)
-	_ = history
 	exchange := make(chan llm.Message)
 	response := llm.ResponseStream{
 		Role:           m.ToGenericRole(RoleModel),
 		ResponseStream: exchange,
 	}
 	go func() {
-		for sdkResponse, err := range m.sdkClient.Models.GenerateContentStream(ctx, m.modelName, genai.Text(lastEntry.Text), &genai.GenerateContentConfig{
-			SystemInstruction: genai.Text(m.config.String(keys.OptionSystemPrompt))[0],
-			Tools: []*genai.Tool{{
-				GoogleSearchRetrieval: &genai.GoogleSearchRetrieval{},
-			}},
-			SafetySettings: harmBlockNone(),
-		}) {
-			buf := new(bytes.Buffer)
-			flushBuffer := func() {
-				if buf.Len() != 0 {
-					exchange <- llm.Message{
-						TokenCount: int(sdkResponse.UsageMetadata.CandidatesTokenCount),
-						Text:       buf.String(),
-						Err:        nil,
-					}
-				}
-				buf.Reset()
+		contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
+			return &genai.Content{
+				Parts: []*genai.Part{{Text: v.Text}},
+				Role:  m.ToProviderRole(v.Role),
 			}
+		}))
+		var tools []*genai.Tool = nil
+		if m.isGroundingEnabled(conversation) {
+			tools = []*genai.Tool{{
+				GoogleSearchRetrieval: &genai.GoogleSearchRetrieval{},
+			}}
+		}
+		for chunk, err := range m.sdkClient.Models.GenerateContentStream(ctx, m.modelName, contents, &genai.GenerateContentConfig{
+			SystemInstruction: genai.Text(m.config.String(keys.OptionSystemPrompt))[0],
+			Tools:             tools,
+			SafetySettings:    harmBlockNone(),
+		}) {
 			if err != nil {
-				flushBuffer()
 				exchange <- llm.Message{Err: errors.WrapPrefix(err, "failed to generate content", 0)}
 				continue
 			}
-			if len(sdkResponse.Candidates) == 0 {
+			if len(chunk.Candidates) == 0 {
 				continue
 			}
-			finishReason := sdkResponse.Candidates[0].FinishReason
-			if finishReason != "" && finishReason != genai.FinishReasonStop {
-				flushBuffer()
-				exchange <- llm.Message{Err: errors.Errorf("model stopped: %s", finishReason)}
+			resp := chunk.Candidates[0]
+			if resp.FinishReason != "" && resp.FinishReason != genai.FinishReasonStop {
+				exchange <- llm.Message{Err: errors.Errorf("model stopped: %s", resp.FinishReason)}
 				continue
 			}
-			if sdkResponse.Candidates[0].Content == nil {
+			if resp.Content == nil {
 				continue
 			}
-			for _, part := range sdkResponse.Candidates[0].Content.Parts {
-				if part.Text != "" {
-					buf.WriteString(part.Text)
-				} else if part.InlineData != nil {
-					buf.WriteString(fmt.Sprintf("(inline-data type: %s)\n", part.InlineData.MIMEType))
-				} else if part.FunctionResponse != nil {
-					buf.WriteString(fmt.Sprintf("(function-response name: %s id: %s)\n",
-						part.FunctionResponse.Name, part.FunctionResponse.ID))
-				} else if part.FunctionCall != nil {
-					buf.WriteString(fmt.Sprintf("(function-call name: %s id: %s)\n",
-						part.FunctionCall.Name, part.FunctionCall.ID))
-				} else if part.FileData != nil {
-					buf.WriteString(fmt.Sprintf("(file-data uri: %s)\n", part.FileData.FileURI))
-				} else if part.ExecutableCode != nil {
-					buf.WriteString(fmt.Sprintf("(executable-code lang: %s, code: %s)\n",
-						part.ExecutableCode.Language, part.ExecutableCode.Code))
-				} else if part.CodeExecutionResult != nil {
-					buf.WriteString(fmt.Sprintf("(code-execution-result output: %s)\n", part.CodeExecutionResult.Output))
-				} else if part.VideoMetadata != nil {
-					buf.WriteString(fmt.Sprintf("(video-meta start: %s end: %s)\n",
-						part.VideoMetadata.StartOffset, part.VideoMetadata.StartOffset))
+			buf := new(bytes.Buffer)
+			for _, part := range resp.Content.Parts {
+				if text, ok := mapToText(part); ok {
+					buf.WriteString(text)
 				} else {
 					exchange <- llm.Message{Err: fmt.Errorf("unknown part type: %s", part.Text)}
 					break
 				}
 			}
-			flushBuffer()
+			exchange <- llm.Message{
+				TokenCount: int(chunk.UsageMetadata.CandidatesTokenCount),
+				Text:       buf.String(),
+				Err:        nil,
+			}
+			buf.Reset()
 		}
 		close(exchange)
 	}()
 	return response, nil
+}
+
+func (m *Model) isGroundingEnabled(conversation llm.Conversation) bool {
+	if len(conversation.Entries) == 0 {
+		return false
+	}
+	lastEntry := conversation.Entries[len(conversation.Entries)-1]
+	text := strings.ToLower(lastEntry.Text)
+	return strings.Contains(text, "use grounding")
+}
+
+func mapToText(part *genai.Part) (string, bool) {
+	if part.Text != "" {
+		return part.Text, true
+	} else if part.InlineData != nil {
+		return fmt.Sprintf("(inline-data type: %s)\n", part.InlineData.MIMEType), true
+	} else if part.FunctionResponse != nil {
+		return fmt.Sprintf("(function-response name: %s id: %s)\n",
+			part.FunctionResponse.Name, part.FunctionResponse.ID), true
+	} else if part.FunctionCall != nil {
+		return fmt.Sprintf("(function-call name: %s id: %s)\n",
+			part.FunctionCall.Name, part.FunctionCall.ID), true
+	} else if part.FileData != nil {
+		return fmt.Sprintf("(file-data uri: %s)\n", part.FileData.FileURI), true
+	} else if part.ExecutableCode != nil {
+		return fmt.Sprintf("(executable-code lang: %s, code: %s)\n",
+			part.ExecutableCode.Language, part.ExecutableCode.Code), true
+	} else if part.CodeExecutionResult != nil {
+		return fmt.Sprintf("(code-execution-result output: %s)\n", part.CodeExecutionResult.Output), true
+	} else if part.VideoMetadata != nil {
+		return fmt.Sprintf("(video-meta start: %s end: %s)\n",
+			part.VideoMetadata.StartOffset, part.VideoMetadata.StartOffset), true
+	}
+	return "", false
 }
 
 func harmBlockNone() []*genai.SafetySetting {
@@ -187,9 +232,17 @@ func harmBlockNone() []*genai.SafetySetting {
 	}))
 }
 
-// The gen-ai-go API requires the last entry of a conversation to be submitted on its own
-func extractLast(conversation llm.Conversation) ([]llm.ChatEntry, llm.ChatEntry) {
-	return conversation.Entries[:len(conversation.Entries)-1], conversation.Entries[len(conversation.Entries)-1]
+type ModelInfo struct {
+	Name        string `json:"name"`
+	BaseModelID string `json:"baseModelId"`
+	Version     string `json:"version"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description"`
+	MaxTokens   int    `json:"maxTokens"`
+}
+
+type ListModelsOutput struct {
+	Models []ModelInfo `json:"models"`
 }
 
 var _ llm.ProviderIfc = (*Provider)(nil)

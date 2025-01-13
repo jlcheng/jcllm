@@ -17,16 +17,17 @@ import (
 const MultiLinePrefix = "..."
 
 type ReplContext struct {
-	config      configuration.Configuration
-	logger      *log.Logger
-	stopRepl    bool
-	inputBuffer *strings.Builder
-	provider    llm.ProviderIfc
-	modelName   string
-	model       llm.ModelIfc
-	session     llm.Conversation
-	readline    *readline.Instance
-	completer   readline.AutoCompleter
+	config          configuration.Configuration
+	logger          *log.Logger
+	stopRepl        bool
+	inputBuffer     *strings.Builder
+	provider        llm.ProviderIfc
+	modelName       string
+	model           llm.ModelIfc
+	session         llm.Conversation
+	readline        *readline.Instance
+	completer       readline.AutoCompleter
+	enableGrounding bool
 }
 
 func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplContext, error) {

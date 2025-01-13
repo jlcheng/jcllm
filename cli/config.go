@@ -6,7 +6,7 @@ import (
 )
 
 var ConfigMetadata = []configuration.Metadata{
-	{keys.OptionProvider, keys.ProviderGemini, "provider name"},
+	{keys.OptionProvider, keys.ProviderGeminiLegacy, "provider name"},
 	{keys.OptionLogFile, "", "If specified, log to this diagnostic log file"},
 	{keys.OptionModel, "gemini-1.5-flash-8b", "model name"},
 	{keys.OptionGeminiApiKey, "", "Gemini API Key"},

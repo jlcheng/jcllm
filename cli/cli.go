@@ -25,7 +25,7 @@ func New(config configuration.Configuration) *CLI {
 }
 
 func (cli *CLI) ListProviders() error {
-	providers := []string{keys.ProviderGemini}
+	providers := []string{keys.ProviderGeminiLegacy}
 	fmt.Println("Supported providers:")
 	for _, provider := range providers {
 		fmt.Println(provider)
