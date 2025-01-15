@@ -21,7 +21,7 @@ import (
 //  1. Command-line arguments.
 //  2. Environment variables.
 //  3. Entries from a configuration file.
-func New(configMetadata []configuration.Metadata) (configuration.Configuration, error) {
+func New(stringConfigs []configuration.Metadata, boolConfigs []configuration.Metadata) (configuration.Configuration, error) {
 	k := koanf.New(".")
 
 	configFile := findConfigFile()
@@ -39,8 +39,11 @@ func New(configMetadata []configuration.Metadata) (configuration.Configuration, 
 	}
 
 	f := flag.NewFlagSet("config", flag.ContinueOnError)
-	for _, meta := range configMetadata {
+	for _, meta := range stringConfigs {
 		f.String(meta.Name, meta.DefaultValue, meta.Usage)
+	}
+	for _, meta := range boolConfigs {
+		f.Bool(meta.Name, false, meta.Usage)
 	}
 
 	if err := f.Parse(os.Args[1:]); err != nil {

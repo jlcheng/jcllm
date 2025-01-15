@@ -216,4 +216,4 @@ type Metadata struct {
 // and returns a Configuration instance.
 //
 // ErrHelp may be returned if the user specified `--help` when invoking the program.
-type ConfigProvider func([]Metadata) (Configuration, error)
+type ConfigProvider func(stringConfigs []Metadata, boolConfigs []Metadata) (Configuration, error)

@@ -13,3 +13,7 @@ var ConfigMetadata = []configuration.Metadata{
 	{keys.OptionCommand, "repl", "Supported commands are: list-models, list-providers, repl"},
 	{keys.OptionSystemPrompt, "You are an AI assistant. Be concise.", "If specified, use this system prompt"},
 }
+
+var ConfigBools = []configuration.Metadata{
+	{keys.OptionsVersion, "", "Show version information."},
+}

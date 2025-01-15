@@ -1,7 +1,6 @@
 package repl
 
 import (
-	"context"
 	"fmt"
 	"github.com/ergochat/readline"
 	"github.com/go-errors/errors"
@@ -23,7 +22,6 @@ type ReplContext struct {
 	inputBuffer     *strings.Builder
 	provider        llm.ProviderIfc
 	modelName       string
-	model           llm.ModelIfc
 	session         llm.Conversation
 	readline        *readline.Instance
 	completer       readline.AutoCompleter
@@ -61,11 +59,6 @@ func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplCon
 }
 
 func (replCtx *ReplContext) SetModel(modelName string) error {
-	model, err := replCtx.provider.GetModel(context.Background(), modelName)
-	if err != nil {
-		return err
-	}
-	replCtx.model = model
 	replCtx.modelName = modelName
 	return nil
 }

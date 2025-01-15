@@ -10,8 +10,13 @@ import (
 	"os"
 )
 
+var (
+	version = "undefined"
+	commit  = "undefined"
+)
+
 func main() {
-	config, err := defaultconfig.New(cli.ConfigMetadata)
+	config, err := defaultconfig.New(cli.ConfigMetadata, cli.ConfigBools)
 	if err != nil {
 		if errors.Is(err, configuration.ErrHelp) {
 			os.Exit(0)
@@ -19,7 +24,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	app := cli.New(config)
+	app := cli.New(version, commit, config)
 	if err := app.Do(); err != nil {
 		log.Fatal(err)
 	}

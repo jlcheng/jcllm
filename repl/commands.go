@@ -64,8 +64,11 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			Text: replCtx.inputBuffer.String(),
 		})
 
-		resp, err := replCtx.model.SolicitResponse(context.Background(), llm.Conversation{
-			Entries: session.Entries,
+		resp, err := replCtx.provider.SolicitResponse(context.Background(), llm.SolicitResponseInput{
+			ModelName: replCtx.modelName,
+			Conversation: llm.Conversation{
+				Entries: session.Entries,
+			},
 		})
 		if err != nil {
 			return fmt.Errorf("llm client error: %w", err)

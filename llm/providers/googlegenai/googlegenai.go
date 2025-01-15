@@ -1,7 +1,6 @@
 package googlegenai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,9 +25,8 @@ const (
 )
 
 type Provider struct {
-	config      configuration.Configuration
-	logger      *log.Logger
-	cachedModel *Model
+	config configuration.Configuration
+	logger *log.Logger
 }
 
 // NewProvider creates a provider to models powered by https://pkg.go.dev/google.golang.org/genai.
@@ -67,38 +65,7 @@ func (p *Provider) ListModels(_ context.Context) ([]llm.ModelInfo, error) {
 	return modelsList, nil
 }
 
-func (p *Provider) GetModel(ctx context.Context, modelName string) (llm.ModelIfc, error) {
-	if p.cachedModel == nil {
-		sdkClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-			APIKey:  p.config.String(keys.OptionGeminiApiKey),
-			Backend: genai.BackendGoogleAI,
-		})
-		if err != nil {
-			return nil, errors.WrapPrefix(err, "failed to initialize client from google.golang.org/genai", 0)
-		}
-		p.cachedModel = NewModel(modelName, p.config, p.logger, sdkClient)
-	}
-	return p.cachedModel, nil
-}
-
-type Model struct {
-	logger    *log.Logger
-	modelName string
-	config    configuration.Configuration
-	sdkClient *genai.Client
-}
-
-// NewModel returns a Model which can address requests for any model. It can be safely shared between models.
-func NewModel(modelName string, config configuration.Configuration, logger *log.Logger, sdkClient *genai.Client) *Model {
-	return &Model{
-		logger:    logger,
-		modelName: modelName,
-		config:    config,
-		sdkClient: sdkClient,
-	}
-}
-
-func (m *Model) ToProviderRole(genericRole string) (providerRole string) {
+func (p *Provider) ToProviderRole(genericRole string) (providerRole string) {
 	switch genericRole {
 	case llm.RoleAssistant:
 		return RoleModel
@@ -111,7 +78,7 @@ func (m *Model) ToProviderRole(genericRole string) (providerRole string) {
 
 }
 
-func (m *Model) ToGenericRole(providerRole string) (genericRole string) {
+func (p *Provider) ToGenericRole(providerRole string) (genericRole string) {
 	switch providerRole {
 	case RoleModel:
 		return llm.RoleAssistant
@@ -121,26 +88,32 @@ func (m *Model) ToGenericRole(providerRole string) (genericRole string) {
 	return genericRole
 }
 
-func (m *Model) ModelName() string {
-	return m.modelName
-}
-
-func (m *Model) SolicitResponse(ctx context.Context, conversation llm.Conversation) (llm.ResponseStream, error) {
+func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitResponseInput) (llm.ResponseStream, error) {
+	conversation := input.Conversation
 	exchange := make(chan llm.Message)
 	response := llm.ResponseStream{
-		Role:           m.ToGenericRole(RoleModel),
+		Role:           p.ToGenericRole(RoleModel),
 		ResponseStream: exchange,
 	}
 	go func() {
 		contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
 			return &genai.Content{
 				Parts: []*genai.Part{{Text: v.Text}},
-				Role:  m.ToProviderRole(v.Role),
+				Role:  p.ToProviderRole(v.Role),
 			}
 		}))
-		tools := m.handleGroundingSupport(conversation, nil)
-		for chunk, err := range m.sdkClient.Models.GenerateContentStream(ctx, m.modelName, contents, &genai.GenerateContentConfig{
-			SystemInstruction: genai.Text(m.config.String(keys.OptionSystemPrompt))[0],
+		sdkClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+			APIKey:  p.config.String(keys.OptionGeminiApiKey),
+			Backend: genai.BackendGoogleAI,
+		})
+		if err != nil {
+			exchange <- llm.Message{Err: errors.WrapPrefix(err, "error getting gemini client", 0)}
+		}
+		tools := p.handleGroundingSupport(input, nil)
+
+		groundingDataBuffer := new(strings.Builder)
+		for chunk, err := range sdkClient.Models.GenerateContentStream(ctx, input.ModelName, contents, &genai.GenerateContentConfig{
+			SystemInstruction: genai.Text(p.config.String(keys.OptionSystemPrompt))[0],
 			Tools:             tools,
 			SafetySettings:    harmBlockNone(),
 		}) {
@@ -159,12 +132,19 @@ func (m *Model) SolicitResponse(ctx context.Context, conversation llm.Conversati
 			if resp.Content == nil {
 				continue
 			}
-			buf := new(bytes.Buffer)
+			if resp.GroundingMetadata != nil && resp.GroundingMetadata.GroundingChunks != nil {
+				for _, chunk := range resp.GroundingMetadata.GroundingChunks {
+					if chunk.Web != nil {
+						fmt.Fprintf(groundingDataBuffer, "[%s](%s)\n", chunk.Web.Title, chunk.Web.URI)
+					}
+				}
+			}
+			buf := new(strings.Builder)
 			for _, part := range resp.Content.Parts {
 				if text, ok := mapToText(part); ok {
 					buf.WriteString(text)
 				} else {
-					m.logger.Debugf("unknown part type: %+v", *part)
+					p.logger.Debugf("unknown part type: %+v", *part)
 					exchange <- llm.Message{Err: fmt.Errorf("unknown part type: %s", part.Text)}
 					break
 				}
@@ -176,12 +156,17 @@ func (m *Model) SolicitResponse(ctx context.Context, conversation llm.Conversati
 			}
 			buf.Reset()
 		}
+		if groundingDataBuffer.Len() > 0 {
+			exchange <- llm.Message{
+				Text: fmt.Sprintf("\n\n%s", strings.TrimSpace(groundingDataBuffer.String())),
+			}
+		}
 		close(exchange)
 	}()
 	return response, nil
 }
 
-func (m *Model) isGroundingEnabled(conversation llm.Conversation) bool {
+func (p *Provider) isGroundingEnabled(conversation llm.Conversation) bool {
 	if len(conversation.Entries) == 0 {
 		return false
 	}
@@ -190,7 +175,8 @@ func (m *Model) isGroundingEnabled(conversation llm.Conversation) bool {
 	return strings.Contains(text, "use grounding")
 }
 
-func (m *Model) handleGroundingSupport(conversation llm.Conversation, tools []*genai.Tool) []*genai.Tool {
+func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools []*genai.Tool) []*genai.Tool {
+	conversation := input.Conversation
 	if len(conversation.Entries) == 0 {
 		return tools
 	}
@@ -201,7 +187,7 @@ func (m *Model) handleGroundingSupport(conversation llm.Conversation, tools []*g
 			tools = make([]*genai.Tool, 0)
 		}
 		var searchTool = &genai.Tool{}
-		if strings.HasPrefix(m.modelName, "gemini-2.0-flash") {
+		if strings.HasPrefix(input.ModelName, "gemini-2.0-flash") {
 			searchTool.GoogleSearch = &genai.GoogleSearch{}
 		} else {
 			searchTool.GoogleSearchRetrieval = &genai.GoogleSearchRetrieval{}
@@ -272,4 +258,3 @@ type ListModelsOutput struct {
 }
 
 var _ llm.ProviderIfc = (*Provider)(nil)
-var _ llm.ModelIfc = (*Model)(nil)

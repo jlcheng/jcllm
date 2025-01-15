@@ -7,6 +7,7 @@ const (
 	OptionLogFile        = "log-file"
 	OptionProvider       = "provider"
 	OptionSystemPrompt   = "system-prompt"
+	OptionsVersion       = "version"
 	ProviderGeminiLegacy = "google-pkg-genai"
 	ProviderGemini       = "gemini"
 )

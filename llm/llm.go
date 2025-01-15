@@ -12,15 +12,9 @@ type (
 
 	// ProviderIfc provides an API for interacting with model providers.
 	ProviderIfc interface {
-		ListModels(ctx context.Context) ([]ModelInfo, error)
-		GetModel(ctx context.Context, modelName string) (ModelIfc, error)
-	}
-
-	// ModelIfc provides an API for interacting with large language models over a web service.
-	ModelIfc interface {
 		RoleMapper
-		ModelName() string
-		SolicitResponse(ctx context.Context, conversation Conversation) (ResponseStream, error)
+		ListModels(ctx context.Context) ([]ModelInfo, error)
+		SolicitResponse(ctx context.Context, input SolicitResponseInput) (ResponseStream, error)
 	}
 
 	// RoleMapper maps the generic role to a provider-specific role and vice versa.
@@ -38,6 +32,12 @@ type (
 	ChatEntry struct {
 		Role string `json:"role"`
 		Text string `json:"text"`
+	}
+
+	SolicitResponseInput struct {
+		Conversation Conversation
+		ModelName    string
+		Args         map[string]string
 	}
 
 	ModelInfo struct {

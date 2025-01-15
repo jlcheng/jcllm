@@ -13,14 +13,18 @@ import (
 )
 
 type CLI struct {
-	config configuration.Configuration
-	logger *log.Logger
+	version string
+	commit  string
+	config  configuration.Configuration
+	logger  *log.Logger
 }
 
-func New(config configuration.Configuration) *CLI {
+func New(version string, commit string, config configuration.Configuration) *CLI {
 	return &CLI{
-		config: config,
-		logger: log.New(config.String(keys.OptionLogFile)),
+		version: version,
+		commit:  commit,
+		config:  config,
+		logger:  log.New(config.String(keys.OptionLogFile)),
 	}
 }
 
@@ -72,6 +76,12 @@ func (cli *CLI) Repl() error {
 }
 
 func (cli *CLI) Do() error {
+	if cli.config.Bool("version") {
+		fmt.Printf("jcllm version: %s\n", cli.version)
+		fmt.Printf("commit: %s\n", cli.commit)
+		return nil
+	}
+
 	command := cli.config.String(keys.OptionCommand)
 	switch command {
 	case "list-models":
