@@ -76,20 +76,22 @@ func (p *Provider) GetModel(ctx context.Context, modelName string) (llm.ModelIfc
 		if err != nil {
 			return nil, errors.WrapPrefix(err, "failed to initialize client from google.golang.org/genai", 0)
 		}
-		p.cachedModel = NewModel(modelName, p.config, sdkClient)
+		p.cachedModel = NewModel(modelName, p.config, p.logger, sdkClient)
 	}
 	return p.cachedModel, nil
 }
 
 type Model struct {
+	logger    *log.Logger
 	modelName string
 	config    configuration.Configuration
 	sdkClient *genai.Client
 }
 
 // NewModel returns a Model which can address requests for any model. It can be safely shared between models.
-func NewModel(modelName string, config configuration.Configuration, sdkClient *genai.Client) *Model {
+func NewModel(modelName string, config configuration.Configuration, logger *log.Logger, sdkClient *genai.Client) *Model {
 	return &Model{
+		logger:    logger,
 		modelName: modelName,
 		config:    config,
 		sdkClient: sdkClient,
@@ -136,12 +138,7 @@ func (m *Model) SolicitResponse(ctx context.Context, conversation llm.Conversati
 				Role:  m.ToProviderRole(v.Role),
 			}
 		}))
-		var tools []*genai.Tool = nil
-		if m.isGroundingEnabled(conversation) {
-			tools = []*genai.Tool{{
-				GoogleSearchRetrieval: &genai.GoogleSearchRetrieval{},
-			}}
-		}
+		tools := m.handleGroundingSupport(conversation, nil)
 		for chunk, err := range m.sdkClient.Models.GenerateContentStream(ctx, m.modelName, contents, &genai.GenerateContentConfig{
 			SystemInstruction: genai.Text(m.config.String(keys.OptionSystemPrompt))[0],
 			Tools:             tools,
@@ -167,6 +164,7 @@ func (m *Model) SolicitResponse(ctx context.Context, conversation llm.Conversati
 				if text, ok := mapToText(part); ok {
 					buf.WriteString(text)
 				} else {
+					m.logger.Debugf("unknown part type: %+v", *part)
 					exchange <- llm.Message{Err: fmt.Errorf("unknown part type: %s", part.Text)}
 					break
 				}
@@ -190,6 +188,27 @@ func (m *Model) isGroundingEnabled(conversation llm.Conversation) bool {
 	lastEntry := conversation.Entries[len(conversation.Entries)-1]
 	text := strings.ToLower(lastEntry.Text)
 	return strings.Contains(text, "use grounding")
+}
+
+func (m *Model) handleGroundingSupport(conversation llm.Conversation, tools []*genai.Tool) []*genai.Tool {
+	if len(conversation.Entries) == 0 {
+		return tools
+	}
+	lastEntry := conversation.Entries[len(conversation.Entries)-1]
+	text := strings.ToLower(lastEntry.Text)
+	if strings.Contains(text, "use grounding") || strings.Contains(text, "ground with search") {
+		if tools == nil {
+			tools = make([]*genai.Tool, 0)
+		}
+		var searchTool = &genai.Tool{}
+		if strings.HasPrefix(m.modelName, "gemini-2.0-flash") {
+			searchTool.GoogleSearch = &genai.GoogleSearch{}
+		} else {
+			searchTool.GoogleSearchRetrieval = &genai.GoogleSearchRetrieval{}
+		}
+		return append(tools, searchTool)
+	}
+	return tools
 }
 
 func getTokenCount(chunk *genai.GenerateContentResponse) int {

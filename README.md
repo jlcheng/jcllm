@@ -8,13 +8,13 @@ Go to https://github.com/jlcheng/jcllm/releases and download the archive for you
 
 # Configuration
 
-1. You can run jcllm without any configuration
+1. You can run jcllm without any configuration, by specifying required options on the command-line.
 
 ```
 jcllm --provider gemini --model=gemini-1.5-flash-8b --gemini-api-key=...
 ```
 
-2. You can specify api keys via environment variables
+2. You can also set options as environment variables, to avoid specifying the API key on the command-line.
 
 ```
 export JCLLM_GEMINI_API_KEY=...
@@ -22,11 +22,11 @@ export JCLLM_GEMINI_API_KEY=...
 jcllm --provider gemini --model=gemini-1.5-flash-8b
 ```
 
-Any option on the command line can be converted into an environmnet variable by adding "JCLLM_", making the option uppercase, and changing the dash into an underscore. 
+The environmnet variable name is determined by by 1) Adding "JCLLM_" as a prefix; 2) Making the string uppercase; and 3) Changing dashes into an underscores. 
 
-e.g., proviedr => `JCLLM_PROVIDER`, gemini-api-key => 'JCLLM_GEMINI_API_KEY`.
+e.g., `--provider` becomes `JCLLM_PROVIDER` and `--gemini-api-key` becomes `JCLLM_GEMINI_API_KEY`.
 
-3. You can use a configuratoin file.
+3. You can also use a configuratoin file.
 
 The program will look for a configuration file in the local directory named `.jcllm.toml`, or `$HOME/.jcllm.d/jcllm.toml`.
 

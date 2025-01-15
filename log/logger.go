@@ -53,6 +53,17 @@ func (w fakeWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+func (logger *Logger) Debugf(format string, v ...interface{}) {
+	writer, err := logger.fout()
+	if err != nil {
+		return
+	}
+	timestamp := time.Now().Format("2006-01-02T15:04:05")
+	level := strings.ToUpper(Debug.String())
+	message := fmt.Sprintf(format, v...)
+	fmt.Fprintf(writer, "%s %s %s", timestamp, level, message)
+}
+
 func (logger *Logger) Errorf(format string, v ...interface{}) {
 	writer, errGetLogger := logger.fout()
 	if errGetLogger != nil {
