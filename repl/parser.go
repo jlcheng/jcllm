@@ -24,12 +24,14 @@ func (c commandParserStruct) Parse(line string) CmdIfc {
 
 func NewSlashCommandParser(replCtx *ReplContext) CommandParser {
 	return ParseFunc(func(line string) CmdIfc {
-		trimmedLine := strings.TrimSpace(line)
-		if trimmedLine == "/c history" {
-			return NewSummarizeHistoryCmd(replCtx)
+		tuple := strings.SplitN(strings.TrimSpace(line), " ", 2)
+		if tuple[0] != "/c" {
+			return nil
 		}
-		if trimmedLine == "/c clear" {
-			return NewClearConversationCommand(replCtx)
+		cmdName := tuple[1]
+		commandDefinitions := replCtx.cmdDefinitions.Commands()
+		if command, ok := commandDefinitions[cmdName]; ok {
+			return command
 		}
 		return nil
 	})

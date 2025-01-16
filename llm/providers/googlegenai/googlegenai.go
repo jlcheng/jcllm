@@ -13,6 +13,7 @@ import (
 	"jcheng.org/jcllm/llm"
 	"jcheng.org/jcllm/log"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -158,7 +159,7 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 		}
 		if groundingDataBuffer.Len() > 0 {
 			exchange <- llm.Message{
-				Text: fmt.Sprintf("\n\n%s", strings.TrimSpace(groundingDataBuffer.String())),
+				Text: fmt.Sprintf("\n\n%s\n", strings.TrimSpace(groundingDataBuffer.String())),
 			}
 		}
 		close(exchange)
@@ -177,12 +178,21 @@ func (p *Provider) isGroundingEnabled(conversation llm.Conversation) bool {
 
 func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools []*genai.Tool) []*genai.Tool {
 	conversation := input.Conversation
-	if len(conversation.Entries) == 0 {
+	if len(conversation.Entries) == 0 || input.Args[keys.ArgNameSuppress] == keys.True {
 		return tools
 	}
+	groundWithSearch := false
 	lastEntry := conversation.Entries[len(conversation.Entries)-1]
-	text := strings.ToLower(lastEntry.Text)
-	if strings.Contains(text, "use grounding") || strings.Contains(text, "ground with search") {
+	lines := strings.Split(strings.TrimSpace(lastEntry.Text), "\n")
+	lastLine := lines[len(lines)-1]
+	re := regexp.MustCompile(`@[a-zA-Z]+`)
+	for _, match := range re.FindAllString(lastLine, -1) {
+		if strings.TrimPrefix(match, "@") == "ground" {
+			groundWithSearch = true
+			break
+		}
+	}
+	if groundWithSearch {
 		if tools == nil {
 			tools = make([]*genai.Tool, 0)
 		}

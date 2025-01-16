@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"jcheng.org/jcllm/configuration/keys"
 	"jcheng.org/jcllm/dye"
 	"jcheng.org/jcllm/llm"
 	"math"
@@ -58,6 +59,8 @@ func NewAppendCmd(replCtx *ReplContext, text string) CmdIfc {
 func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 	return NewLambdaCmd(func() error {
 		startTime := time.Now()
+		// We want to ensure the suppress command is only applied for one turn of conversation.
+		defer func() { replCtx.solicitResponseArgs[keys.ArgNameSuppress] = keys.False }()
 		session := &replCtx.session
 		session.Entries = append(session.Entries, llm.ChatEntry{
 			Role: llm.RoleUser,
@@ -69,6 +72,7 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			Conversation: llm.Conversation{
 				Entries: session.Entries,
 			},
+			Args: replCtx.solicitResponseArgs,
 		})
 		if err != nil {
 			return fmt.Errorf("llm client error: %w", err)
@@ -91,7 +95,7 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 		}
 		elapsedTime := time.Since(startTime)
 		tokensPerSec := float64(tokens) / math.Max(1, elapsedTime.Seconds())
-		fmt.Printf("\n[%.2f tokens/s, %.2fs, %d tokens]\n", tokensPerSec, elapsedTime.Seconds(), tokens)
+		fmt.Printf("[%.2f tokens/s, %.2fs, %d tokens]\n", tokensPerSec, elapsedTime.Seconds(), tokens)
 		session.Entries = append(session.Entries, llm.ChatEntry{
 			Role: llm.RoleAssistant,
 			Text: responseBuffer.String(),
@@ -174,6 +178,14 @@ func NewSummarizeHistoryCmd(replCtx *ReplContext) CmdIfc {
 			fmt.Println(roleToPrefix(chatEntry) + " " + summarizeText(chatEntry))
 		}
 		fmt.Println("======= End Summary ========")
+		return nil
+	})
+}
+
+func NewSuppressCommand(replCtx *ReplContext) CmdIfc {
+	return NewLambdaCmd(func() error {
+		replCtx.solicitResponseArgs[keys.ArgNameSuppress] = keys.True
+		fmt.Printf("%q\n", replCtx.solicitResponseArgs)
 		return nil
 	})
 }

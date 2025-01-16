@@ -16,32 +16,36 @@ import (
 const MultiLinePrefix = "..."
 
 type ReplContext struct {
-	config          configuration.Configuration
-	logger          *log.Logger
-	stopRepl        bool
-	inputBuffer     *strings.Builder
-	provider        llm.ProviderIfc
-	modelName       string
-	session         llm.Conversation
-	readline        *readline.Instance
-	completer       readline.AutoCompleter
-	enableGrounding bool
+	config              configuration.Configuration
+	logger              *log.Logger
+	stopRepl            bool
+	inputBuffer         *strings.Builder
+	provider            llm.ProviderIfc
+	modelName           string
+	session             llm.Conversation
+	readline            *readline.Instance
+	completer           readline.AutoCompleter
+	enableGrounding     bool
+	cmdDefinitions      CommandsProvider
+	solicitResponseArgs map[string]string
 }
 
 func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplContext, error) {
 	replCtx := &ReplContext{
-		stopRepl:    false,
-		inputBuffer: new(strings.Builder),
-		config:      config,
-		provider:    provider,
-		logger:      log.New(config.String(keys.OptionLogFile)),
+		stopRepl:            false,
+		inputBuffer:         new(strings.Builder),
+		config:              config,
+		provider:            provider,
+		logger:              log.New(config.String(keys.OptionLogFile)),
+		solicitResponseArgs: make(map[string]string),
 	}
+	replCtx.cmdDefinitions = newCmdProviderImpl(replCtx)
 
 	var completer = readline.NewPrefixCompleter(
+		// Make this a multi-line input
+		readline.PcItem("..."),
 		// Run commands
-		readline.PcItem("/c",
-			rlCmdCompleter()...,
-		),
+		replCtx.slashCommandCompletions(),
 		// Help menu
 		readline.PcItem("/h"),
 		// Quit this program
@@ -155,11 +159,33 @@ func (replCtx *ReplContext) prompt(newPrompt string) {
 	replCtx.readline.SetPrompt(newPrompt)
 }
 
-func rlCmdCompleter() []*readline.PrefixCompleter {
+func (replCtx *ReplContext) slashCommandCompletions() *readline.PrefixCompleter {
+	cmdMap := newCmdProviderImpl(replCtx).Commands()
 	r := make([]*readline.PrefixCompleter, 0)
-	r = append(r, readline.PcItem("history"))
-	r = append(r, readline.PcItem("clear"))
-	return r
+	for cmdName, _ := range cmdMap {
+		r = append(r, readline.PcItem(cmdName))
+	}
+	return readline.PcItem("/c", r...)
+}
+
+type CommandsProvider interface {
+	Commands() map[string]CmdIfc
+}
+
+type cmdProviderImpl struct {
+	replCtx *ReplContext
+}
+
+func newCmdProviderImpl(replCtx *ReplContext) *cmdProviderImpl {
+	return &cmdProviderImpl{replCtx: replCtx}
+}
+
+func (impl *cmdProviderImpl) Commands() map[string]CmdIfc {
+	return map[string]CmdIfc{
+		"history":  NewSummarizeHistoryCmd(impl.replCtx),
+		"clear":    NewClearConversationCommand(impl.replCtx),
+		"suppress": NewSuppressCommand(impl.replCtx),
+	}
 }
 
 func filterInput(r rune) (rune, bool) {
