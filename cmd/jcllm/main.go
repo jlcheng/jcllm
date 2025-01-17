@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/go-errors/errors"
-	"jcheng.org/jcllm/cli"
-	"jcheng.org/jcllm/configuration"
-	"jcheng.org/jcllm/configuration/providers/defaultconfig"
+	"github.com/jlcheng/jcllm/cli"
+	"github.com/jlcheng/jcllm/configuration"
+	"github.com/jlcheng/jcllm/configuration/providers/defaultconfig"
 	"log"
 	"os"
 )

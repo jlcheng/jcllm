@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"github.com/ergochat/readline"
 	"github.com/go-errors/errors"
+	"github.com/jlcheng/jcllm/configuration"
+	"github.com/jlcheng/jcllm/configuration/keys"
+	"github.com/jlcheng/jcllm/dye"
+	"github.com/jlcheng/jcllm/llm"
+	"github.com/jlcheng/jcllm/log"
 	"io"
-	"jcheng.org/jcllm/configuration"
-	"jcheng.org/jcllm/configuration/keys"
-	"jcheng.org/jcllm/dye"
-	"jcheng.org/jcllm/llm"
-	"jcheng.org/jcllm/log"
 	"strings"
 )
 

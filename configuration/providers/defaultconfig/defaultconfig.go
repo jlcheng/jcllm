@@ -2,7 +2,7 @@ package defaultconfig
 
 import (
 	"github.com/go-errors/errors"
-	"jcheng.org/jcllm/configuration"
+	"github.com/jlcheng/jcllm/configuration"
 	"log"
 	"os"
 	"path/filepath"

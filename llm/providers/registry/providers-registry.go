@@ -3,10 +3,10 @@ package registry
 import (
 	"context"
 	"fmt"
-	"jcheng.org/jcllm/configuration"
-	"jcheng.org/jcllm/configuration/keys"
-	"jcheng.org/jcllm/llm"
-	"jcheng.org/jcllm/llm/providers/googlegenai"
+	"github.com/jlcheng/jcllm/configuration"
+	"github.com/jlcheng/jcllm/configuration/keys"
+	"github.com/jlcheng/jcllm/llm"
+	"github.com/jlcheng/jcllm/llm/providers/googlegenai"
 )
 
 func NewProvider(ctx context.Context, configuration configuration.Configuration, name string) (llm.ProviderIfc, error) {

@@ -1,7 +1,7 @@
 package extract_test
 
 import (
-	"jcheng.org/jcllm/extract"
+	"github.com/jlcheng/jcllm/extract"
 	"reflect"
 	"testing"
 )

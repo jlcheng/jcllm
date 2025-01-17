@@ -4,7 +4,7 @@ package llmfakes
 import (
 	"sync"
 
-	"jcheng.org/jcllm/llm"
+	"github.com/jlcheng/jcllm/llm"
 )
 
 type FakeRoleMapper struct {

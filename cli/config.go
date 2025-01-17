@@ -1,8 +1,8 @@
 package cli
 
 import (
-	"jcheng.org/jcllm/configuration"
-	"jcheng.org/jcllm/configuration/keys"
+	"github.com/jlcheng/jcllm/configuration"
+	"github.com/jlcheng/jcllm/configuration/keys"
 )
 
 var ConfigMetadata = []configuration.Metadata{

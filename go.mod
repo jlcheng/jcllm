@@ -1,4 +1,4 @@
-module jcheng.org/jcllm
+module github.com/jlcheng/jcllm
 
 go 1.23.4
 

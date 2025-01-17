@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-errors/errors"
-	"jcheng.org/jcllm/configuration"
-	"jcheng.org/jcllm/configuration/keys"
-	"jcheng.org/jcllm/llm"
-	"jcheng.org/jcllm/llm/providers/registry"
-	"jcheng.org/jcllm/log"
-	"jcheng.org/jcllm/repl"
+	"github.com/jlcheng/jcllm/configuration"
+	"github.com/jlcheng/jcllm/configuration/keys"
+	"github.com/jlcheng/jcllm/llm"
+	"github.com/jlcheng/jcllm/llm/providers/registry"
+	"github.com/jlcheng/jcllm/log"
+	"github.com/jlcheng/jcllm/repl"
 )
 
 type CLI struct {
