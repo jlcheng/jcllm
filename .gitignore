@@ -35,8 +35,6 @@ __pycache__
 # buf generated directory
 /gen
 
-# go generated directory
-/dist# Added by goreleaser init:
-dist/
+/dist
 .aider*
 .env
