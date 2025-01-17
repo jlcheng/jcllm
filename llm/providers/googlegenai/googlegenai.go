@@ -166,15 +166,6 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 	return response, nil
 }
 
-func (p *Provider) isGroundingEnabled(conversation llm.Conversation) bool {
-	if len(conversation.Entries) == 0 {
-		return false
-	}
-	lastEntry := conversation.Entries[len(conversation.Entries)-1]
-	text := strings.ToLower(lastEntry.Text)
-	return strings.Contains(text, "use grounding")
-}
-
 func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools []*genai.Tool) []*genai.Tool {
 	conversation := input.Conversation
 	if len(conversation.Entries) == 0 || input.Args[keys.ArgNameSuppress] == keys.True {

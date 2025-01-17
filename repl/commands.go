@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jlcheng/jcllm/configuration/keys"
-	"github.com/jlcheng/jcllm/dye"
-	"github.com/jlcheng/jcllm/llm"
 	"io"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/jlcheng/jcllm/configuration/keys"
+	"github.com/jlcheng/jcllm/dye"
+	"github.com/jlcheng/jcllm/llm"
 )
 
 type (
@@ -191,7 +192,6 @@ func NewSetModelCmd(replCtx *ReplContext, modelName string) CmdIfc {
 		return nil
 	})
 }
-
 
 func NewSuppressCommand(replCtx *ReplContext) CmdIfc {
 	return NewLambdaCmd(func() error {

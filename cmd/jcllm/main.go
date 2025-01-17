@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+
 	"github.com/go-errors/errors"
 	"github.com/jlcheng/jcllm/cli"
 	"github.com/jlcheng/jcllm/configuration"
 	"github.com/jlcheng/jcllm/configuration/providers/defaultconfig"
-	"log"
-	"os"
 )
 
 var (

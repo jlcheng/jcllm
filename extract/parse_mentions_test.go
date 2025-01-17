@@ -1,9 +1,10 @@
 package extract_test
 
 import (
-	"github.com/jlcheng/jcllm/extract"
 	"reflect"
 	"testing"
+
+	"github.com/jlcheng/jcllm/extract"
 )
 
 func TestParseMentionsFromEnd(t *testing.T) {

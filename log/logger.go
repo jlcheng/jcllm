@@ -2,11 +2,12 @@ package log
 
 import (
 	"fmt"
-	"github.com/go-errors/errors"
 	"io"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/go-errors/errors"
 )
 
 //go:generate stringer -type=Level

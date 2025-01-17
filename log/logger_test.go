@@ -3,10 +3,11 @@ package log
 import (
 	"bytes"
 	"fmt"
-	"github.com/go-errors/errors"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/go-errors/errors"
 )
 
 func TestLogger_Errorf(t *testing.T) {

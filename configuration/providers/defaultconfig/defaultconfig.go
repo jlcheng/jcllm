@@ -1,12 +1,13 @@
 package defaultconfig
 
 import (
-	"github.com/go-errors/errors"
-	"github.com/jlcheng/jcllm/configuration"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-errors/errors"
+	"github.com/jlcheng/jcllm/configuration"
 
 	"github.com/knadh/koanf/parsers/toml"
 	"github.com/knadh/koanf/providers/env"

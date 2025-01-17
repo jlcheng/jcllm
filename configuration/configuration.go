@@ -1,8 +1,9 @@
 package configuration
 
 import (
-	"github.com/go-errors/errors"
 	"time"
+
+	"github.com/go-errors/errors"
 )
 
 type KeyMap map[string][]string

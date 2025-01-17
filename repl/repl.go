@@ -2,6 +2,9 @@ package repl
 
 import (
 	"fmt"
+	"io"
+	"strings"
+
 	"github.com/ergochat/readline"
 	"github.com/go-errors/errors"
 	"github.com/jlcheng/jcllm/configuration"
@@ -9,8 +12,6 @@ import (
 	"github.com/jlcheng/jcllm/dye"
 	"github.com/jlcheng/jcllm/llm"
 	"github.com/jlcheng/jcllm/log"
-	"io"
-	"strings"
 )
 
 const MultiLinePrefix = "..."

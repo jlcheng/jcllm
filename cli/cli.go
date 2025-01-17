@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+
 	"github.com/go-errors/errors"
 	"github.com/jlcheng/jcllm/configuration"
 	"github.com/jlcheng/jcllm/configuration/keys"
