@@ -64,6 +64,7 @@ func (cli *CLI) ListModels() error {
 }
 
 func (cli *CLI) Repl() error {
+	fmt.Printf("jcllm version: %s\n", cli.version)
 	name := cli.config.String(keys.OptionProvider)
 	provider, err := registry.NewProvider(context.Background(), cli.config, name)
 	if err != nil {

@@ -1,6 +1,7 @@
 package repl
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -17,18 +18,18 @@ import (
 const MultiLinePrefix = "..."
 
 type ReplContext struct {
-	config              configuration.Configuration
-	logger              *log.Logger
-	stopRepl            bool
-	inputBuffer         *strings.Builder
-	provider            llm.ProviderIfc
-	modelName           string
-	session             llm.Conversation
-	readline            *readline.Instance
-	completer           readline.AutoCompleter
-	enableGrounding     bool
-	cmdDefinitions      CommandsProvider
-	solicitResponseArgs map[string]string
+	config                  configuration.Configuration
+	logger                  *log.Logger
+	stopRepl                bool
+	inputBuffer             *strings.Builder
+	provider                llm.ProviderIfc
+	modelName               string
+	session                 llm.Conversation
+	readline                *readline.Instance
+	completer               readline.AutoCompleter
+	cmdDefinitions          CommandsProvider
+	isMultiLineInputEnabled bool
+	solicitResponseArgs     map[string]string
 }
 
 func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplContext, error) {
@@ -51,6 +52,7 @@ func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplCon
 		readline.PcItem("/h"),
 		// Quit this program
 		readline.PcItem("/q"),
+		replCtx.slashModelCompletions(),
 	)
 	readlineInstance, err := readline.NewFromConfig(&readline.Config{
 		AutoComplete:        completer,
@@ -74,7 +76,7 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return NewQuitCmd(replCtx)
-		} else if err != nil {
+		} else {
 			return NewPrintErrCmd(replCtx, err)
 		}
 	}
@@ -86,6 +88,12 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 		// If this is the first line, try to parse it with the slashCommandParser
 		if cmd := slashCommandParser.Parse(line); cmd != nil {
 			return cmd
+		}
+
+		// Handle the /m command to change the model
+		if strings.HasPrefix(line, "/m ") {
+			modelName := strings.TrimSpace(strings.TrimPrefix(line, "/m "))
+			return NewSetModelCmd(replCtx, modelName)
 		}
 
 		// If this is the first line and there is no multi-line prefix, then submit the input
@@ -112,7 +120,7 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 func (replCtx *ReplContext) ResetInput() error {
 	replCtx.inputBuffer.Reset()
 
-	replCtx.prompt(prompts.FirstLine)
+	replCtx.SetMultiLineInput(false)
 	if replCtx.completer != nil {
 		newConfig := replCtx.readline.GetConfig()
 		newConfig.AutoComplete = replCtx.completer
@@ -129,11 +137,11 @@ func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 	if err != nil {
 		return errors.WrapPrefix(err, "failed to create replCtx", 0)
 	}
-	replCtx.prompt(prompts.FirstLine)
 	modelName := config.String(keys.OptionModel)
 	if err := replCtx.SetModel(modelName); err != nil {
 		return errors.WrapPrefix(err, fmt.Sprintf("failed to set model [%s]", modelName), 0)
 	}
+	replCtx.SetMultiLineInput(false)
 
 	for !replCtx.stopRepl {
 		cmd := replCtx.ParseLine()
@@ -145,28 +153,54 @@ func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 	return nil
 }
 
-var prompts = struct {
-	FirstLine   string
-	EmptyPrompt string
-}{
-	FirstLine:   "[User]: ",
-	EmptyPrompt: "",
+func (replCtx *ReplContext) UpdatePrompt() {
+	if replCtx.inputBuffer.Len() == 0 {
+		replCtx.readline.SetPrompt("")
+	}
+	promptPrefix := dye.Str("[To ").Green()
+	modelName := dye.Str(replCtx.modelName).Bold().Yellow()
+	promptSuffix := dye.Str("]:").Green()
+	formattedPrompt := fmt.Sprintf("%s%s%s ", promptPrefix, modelName, promptSuffix)
+	replCtx.readline.SetPrompt(formattedPrompt)
 }
 
-func (replCtx *ReplContext) prompt(newPrompt string) {
-	if newPrompt == prompts.FirstLine {
-		newPrompt = dye.Str(newPrompt).Bold().Green()
-	}
-	replCtx.readline.SetPrompt(newPrompt)
+func (replCtx *ReplContext) SetMultiLineInput(isMultiLineInputEnabled bool) {
+	replCtx.isMultiLineInputEnabled = isMultiLineInputEnabled
+	replCtx.UpdatePrompt()
 }
 
 func (replCtx *ReplContext) slashCommandCompletions() *readline.PrefixCompleter {
 	cmdMap := newCmdProviderImpl(replCtx).Commands()
 	r := make([]*readline.PrefixCompleter, 0)
-	for cmdName, _ := range cmdMap {
+	for cmdName := range cmdMap {
 		r = append(r, readline.PcItem(cmdName))
 	}
 	return readline.PcItem("/c", r...)
+}
+
+func (replCtx *ReplContext) slashModelCompletions() *readline.PrefixCompleter {
+	providerName := replCtx.config.String(keys.OptionProvider)
+	modelsListKey := fmt.Sprintf("%s-%s", providerName, keys.OptionModelsList)
+	models := replCtx.config.Strings(modelsListKey)
+	if len(models) == 0 {
+		fetchedModels, err := replCtx.provider.ListModels(context.Background())
+		if err != nil {
+			models = []string{"<error>cannot fetch models</error>"}
+		} else {
+			models = make([]string, len(fetchedModels))
+			for idx, model := range fetchedModels {
+				models[idx] = model.Name
+			}
+		}
+	}
+
+	return readline.PcItemDynamic(func(_ string) []string {
+		var items []string
+		for _, model := range models {
+			items = append(items, fmt.Sprintf("/m %s", model))
+		}
+		return items
+	})
 }
 
 type CommandsProvider interface {

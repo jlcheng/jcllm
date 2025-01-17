@@ -126,7 +126,8 @@ func NewChainCmd(commands ...CmdIfc) CmdIfc {
 func NewEnterMultiLineModeCmd(replCtx *ReplContext) CmdIfc {
 	return NewLambdaCmd(func() error {
 		readline := replCtx.readline
-		replCtx.prompt(prompts.EmptyPrompt)
+		replCtx.SetMultiLineInput(true)
+		// TODO consider moving this to SetMultiLineInput
 		configCopy := readline.GetConfig()
 		replCtx.completer = configCopy.AutoComplete
 		configCopy.AutoComplete = nil

@@ -4,6 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"slices"
+	"strings"
+
 	"github.com/BooleanCat/go-functional/v2/it"
 	"github.com/go-errors/errors"
 	"github.com/jlcheng/jcllm/configuration"
@@ -12,10 +17,6 @@ import (
 	"github.com/jlcheng/jcllm/llm"
 	"github.com/jlcheng/jcllm/log"
 	"google.golang.org/genai"
-	"io"
-	"net/http"
-	"slices"
-	"strings"
 )
 
 const (
@@ -56,7 +57,7 @@ func (p *Provider) ListModels(_ context.Context) ([]llm.ModelInfo, error) {
 		it.Map(slices.Values(listModelsOutput.Models), func(model ModelInfo) llm.ModelInfo {
 			return llm.ModelInfo{
 				DisplayName: model.DisplayName,
-				Name:        model.Name,
+				Name:        strings.TrimPrefix(model.Name, "models/"),
 				Description: model.Description,
 				MaxTokens:   model.MaxTokens,
 				Version:     model.Version,

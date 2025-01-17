@@ -15,5 +15,5 @@ var ConfigMetadata = []configuration.Metadata{
 }
 
 var ConfigBools = []configuration.Metadata{
-	{keys.OptionsVersion, "", "Show version information."},
+	{keys.OptionVersion, "", "Show version information."},
 }

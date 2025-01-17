@@ -3,11 +3,12 @@ package keys
 const (
 	OptionCommand        = "command"
 	OptionGeminiApiKey   = "gemini-api-key"
-	OptionModel          = "model"
 	OptionLogFile        = "log-file"
+	OptionModel          = "model"
+	OptionModelsList     = "models-list"
 	OptionProvider       = "provider"
 	OptionSystemPrompt   = "system-prompt"
-	OptionsVersion       = "version"
+	OptionVersion        = "version"
 	ProviderGeminiLegacy = "google-pkg-genai"
 	ProviderGemini       = "gemini"
 )
