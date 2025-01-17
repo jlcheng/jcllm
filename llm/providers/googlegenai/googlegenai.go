@@ -10,10 +10,10 @@ import (
 	"io"
 	"jcheng.org/jcllm/configuration"
 	"jcheng.org/jcllm/configuration/keys"
+	"jcheng.org/jcllm/extract"
 	"jcheng.org/jcllm/llm"
 	"jcheng.org/jcllm/log"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 )
@@ -97,12 +97,6 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 		ResponseStream: exchange,
 	}
 	go func() {
-		contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
-			return &genai.Content{
-				Parts: []*genai.Part{{Text: v.Text}},
-				Role:  p.ToProviderRole(v.Role),
-			}
-		}))
 		sdkClient, err := genai.NewClient(ctx, &genai.ClientConfig{
 			APIKey:  p.config.String(keys.OptionGeminiApiKey),
 			Backend: genai.BackendGoogleAI,
@@ -111,7 +105,12 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 			exchange <- llm.Message{Err: errors.WrapPrefix(err, "error getting gemini client", 0)}
 		}
 		tools := p.handleGroundingSupport(input, nil)
-
+		contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
+			return &genai.Content{
+				Parts: []*genai.Part{{Text: v.Text}},
+				Role:  p.ToProviderRole(v.Role),
+			}
+		}))
 		groundingDataBuffer := new(strings.Builder)
 		for chunk, err := range sdkClient.Models.GenerateContentStream(ctx, input.ModelName, contents, &genai.GenerateContentConfig{
 			SystemInstruction: genai.Text(p.config.String(keys.OptionSystemPrompt))[0],
@@ -182,16 +181,15 @@ func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools 
 		return tools
 	}
 	groundWithSearch := false
-	lastEntry := conversation.Entries[len(conversation.Entries)-1]
-	lines := strings.Split(strings.TrimSpace(lastEntry.Text), "\n")
-	lastLine := lines[len(lines)-1]
-	re := regexp.MustCompile(`@[a-zA-Z]+`)
-	for _, match := range re.FindAllString(lastLine, -1) {
-		if strings.TrimPrefix(match, "@") == "ground" {
+	lastEntry := &conversation.Entries[len(conversation.Entries)-1]
+	newText, mentions := extract.MentionsFromEnd(lastEntry.Text)
+	for _, mention := range mentions {
+		if mention == "ground" {
 			groundWithSearch = true
 			break
 		}
 	}
+	lastEntry.Text = newText
 	if groundWithSearch {
 		if tools == nil {
 			tools = make([]*genai.Tool, 0)
