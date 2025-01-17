@@ -38,3 +38,5 @@ __pycache__
 # go generated directory
 /dist# Added by goreleaser init:
 dist/
+.aider*
+.env
