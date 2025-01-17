@@ -182,6 +182,17 @@ func NewSummarizeHistoryCmd(replCtx *ReplContext) CmdIfc {
 	})
 }
 
+func NewSetModelCmd(replCtx *ReplContext, modelName string) CmdIfc {
+	return NewLambdaCmd(func() error {
+		if err := replCtx.SetModel(modelName); err != nil {
+			return err
+		}
+		fmt.Println(dye.Strf("Model set to: %s", modelName).Bold().Yellow())
+		return nil
+	})
+}
+
+
 func NewSuppressCommand(replCtx *ReplContext) CmdIfc {
 	return NewLambdaCmd(func() error {
 		replCtx.solicitResponseArgs[keys.ArgNameSuppress] = keys.True
