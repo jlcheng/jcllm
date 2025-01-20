@@ -36,6 +36,20 @@ func NewQuitCmd(replCtx *ReplContext) CmdIfc {
 	})
 }
 
+func NewHelpCmd(_ *ReplContext) CmdIfc {
+	return NewLambdaCmd(func() error {
+		fmt.Printf("Special commands:\n")
+		fmt.Printf("  %-20sShow this help text\n", "/help")
+		fmt.Printf("  %-20sQuits the program\n", "/quit")
+		fmt.Printf("  %-20sPrints a summary of the chat history\n", "/c history")
+		fmt.Printf("  %-20sClears the chat history\n", "/c clear ")
+		fmt.Printf("  %-20sSuppresses the @ground feature when using Gemini\n", "/c suppress")
+		fmt.Printf("  %-20sChange models\n", "/m <model_name>")
+		fmt.Printf("  %-20sStart with 3 periods (...) to enter multi-line text; End with a single period on its own line\n", "...")
+		return nil
+	})
+}
+
 // NewPrintErrCmd creates a command which prints the given error.
 func NewPrintErrCmd(replCtx *ReplContext, err error) CmdIfc {
 	return NewLambdaCmd(func() error {

@@ -49,9 +49,9 @@ func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplCon
 		// Run commands
 		replCtx.slashCommandCompletions(),
 		// Help menu
-		readline.PcItem("/h"),
+		readline.PcItem("/help"),
 		// Quit this program
-		readline.PcItem("/q"),
+		readline.PcItem("/quit"),
 		replCtx.slashModelCompletions(),
 	)
 	readlineInstance, err := readline.NewFromConfig(&readline.Config{
@@ -85,6 +85,14 @@ func (replCtx *ReplContext) ParseLine() CmdIfc {
 	}
 
 	if replCtx.inputBuffer.Len() == 0 {
+		if strings.TrimSpace(line) == "/quit" {
+			return NewQuitCmd(replCtx)
+		}
+
+		if strings.TrimSpace(line) == "/help" {
+			return NewHelpCmd(replCtx)
+		}
+
 		// If this is the first line, try to parse it with the slashCommandParser
 		if cmd := slashCommandParser.Parse(line); cmd != nil {
 			return cmd
@@ -132,11 +140,21 @@ func (replCtx *ReplContext) ResetInput() error {
 	return nil
 }
 
+func (replCtx *ReplContext) Close() {
+	if replCtx.readline != nil {
+		if err := replCtx.readline.Close(); err != nil {
+			replCtx.logger.Errorf("failed to close readline: %v", err)
+			fmt.Printf("failed to close readline: %v\n", err)
+		}
+	}
+}
+
 func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 	replCtx, err := New(config, provider)
 	if err != nil {
 		return errors.WrapPrefix(err, "failed to create replCtx", 0)
 	}
+	defer replCtx.Close()
 	modelName := config.String(keys.OptionModel)
 	if err := replCtx.SetModel(modelName); err != nil {
 		return errors.WrapPrefix(err, fmt.Sprintf("failed to set model [%s]", modelName), 0)
@@ -154,8 +172,9 @@ func Run(config configuration.Configuration, provider llm.ProviderIfc) error {
 }
 
 func (replCtx *ReplContext) UpdatePrompt() {
-	if replCtx.inputBuffer.Len() == 0 {
+	if replCtx.isMultiLineInputEnabled {
 		replCtx.readline.SetPrompt("")
+		return
 	}
 	promptPrefix := dye.Str("[To ").Green()
 	modelName := dye.Str(replCtx.modelName).Bold().Yellow()
