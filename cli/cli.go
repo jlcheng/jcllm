@@ -30,7 +30,7 @@ func New(version string, commit string, config configuration.Configuration) *CLI
 }
 
 func (cli *CLI) ListProviders() error {
-	providers := []string{keys.ProviderGeminiLegacy}
+	providers := []string{keys.ProviderGemini, keys.ProviderOpenAI}
 	fmt.Println("Supported providers:")
 	for _, provider := range providers {
 		fmt.Println(provider)

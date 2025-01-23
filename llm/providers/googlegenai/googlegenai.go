@@ -73,7 +73,7 @@ func (p *Provider) ToProviderRole(genericRole string) (providerRole string) {
 		return RoleModel
 	case llm.RoleUser:
 		return RoleUser
-	case llm.RolesSystem:
+	case llm.RoleSystem:
 		return RoleUser
 	}
 	return genericRole

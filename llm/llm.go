@@ -61,7 +61,7 @@ type (
 )
 
 const (
-	RolesSystem   = "RoleSystem"
+	RoleSystem    = "RoleSystem"
 	RoleUser      = "RoleUser"
 	RoleAssistant = "RoleAssistant"
 )
