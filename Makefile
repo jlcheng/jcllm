@@ -5,7 +5,6 @@ check:
 
 fmt:
 	goimports -w .
-	gofmt -w .
 
 test:
 	go test ./...

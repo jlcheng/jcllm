@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -95,8 +97,73 @@ func (p *Provider) ListModels(ctx context.Context) ([]llm.ModelInfo, error) {
 }
 
 func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitResponseInput) (llm.ResponseStream, error) {
-	//TODO implement me
-	panic("implement me")
+	exchange := make(chan llm.Message)
+	response := llm.ResponseStream{
+		Role:           RoleAssistant,
+		ResponseStream: exchange,
+	}
+	messages := slices.Collect(it.Map(slices.Values(input.Conversation.Entries), func(v llm.ChatEntry) openaimodels.Message {
+		return openaimodels.Message{
+			Content: v.Text,
+			Role:    p.ToProviderRole(v.Role),
+		}
+	}))
+	chatCompletionRequest := openaimodels.CreateChatCompletionRequest{
+		Model:    input.ModelName,
+		Messages: messages,
+		Stream:   ptr(true),
+		StreamOptions: &openaimodels.StreamOptions{
+			IncludeUsage: ptr(true),
+		},
+	}
+	requestBytes, err := json.Marshal(chatCompletionRequest)
+	if err != nil {
+		return response, errors.WrapPrefix(err, "chat completion request stringify failed", 0)
+	}
+	requestAsStream := bytes.NewReader(requestBytes)
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpointURL("/chat/completions"), requestAsStream)
+	if err != nil {
+		return response, errors.WrapPrefix(err, "chat completions request creation failed", 0)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	body, err := p.submitRequest(request)
+	if err != nil {
+		return response, errors.WrapPrefix(err, "chat completions request submission failed", 0)
+	}
+	go func() {
+		scanner := bufio.NewScanner(body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "" {
+				continue
+			}
+			lineMessage := strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			if lineMessage == "[DONE]" {
+				break
+			}
+			var chunk openaimodels.ChatCompletionChunkResponse
+			if err := json.Unmarshal([]byte(lineMessage), &chunk); err != nil {
+				exchange <- llm.Message{
+					Err: errors.WrapPrefix(err, "unmarshal response failed", 0),
+				}
+				break
+			}
+			if len(chunk.Choices) != 0 {
+				exchange <- llm.Message{
+					Text: chunk.Choices[0].Delta.Content,
+					Err:  nil,
+				}
+			}
+			if chunk.Usage != nil {
+				exchange <- llm.Message{
+					TokenCount: chunk.Usage.CompletionTokens,
+				}
+			}
+		}
+		close(exchange)
+	}()
+	return response, nil
 }
 
 func (p *Provider) baseURL() string {
@@ -139,6 +206,10 @@ func (p *Provider) submitRequest(request *http.Request) (io.ReadCloser, error) {
 		return nil, errors.Errorf("submit request failed, status code: %d, message: %s", response.StatusCode, errorMessage)
 	}
 	return response.Body, nil
+}
+
+func ptr[T any](obj T) *T {
+	return &obj
 }
 
 var _ llm.ProviderIfc = (*Provider)(nil)

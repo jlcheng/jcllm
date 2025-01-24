@@ -92,19 +92,19 @@ func (p *Provider) ToGenericRole(providerRole string) (genericRole string) {
 
 func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitResponseInput) (llm.ResponseStream, error) {
 	conversation := input.Conversation
+	sdkClient, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  p.config.String(keys.OptionGeminiApiKey),
+		Backend: genai.BackendGoogleAI,
+	})
+	if err != nil {
+		return llm.ResponseStream{}, errors.WrapPrefix(err, "gemini client creation failed", 0)
+	}
 	exchange := make(chan llm.Message)
 	response := llm.ResponseStream{
 		Role:           p.ToGenericRole(RoleModel),
 		ResponseStream: exchange,
 	}
 	go func() {
-		sdkClient, err := genai.NewClient(ctx, &genai.ClientConfig{
-			APIKey:  p.config.String(keys.OptionGeminiApiKey),
-			Backend: genai.BackendGoogleAI,
-		})
-		if err != nil {
-			exchange <- llm.Message{Err: errors.WrapPrefix(err, "error getting gemini client", 0)}
-		}
 		tools := p.handleGroundingSupport(input, nil)
 		contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
 			return &genai.Content{
@@ -119,7 +119,7 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 			SafetySettings:    harmBlockNone(),
 		}) {
 			if err != nil {
-				exchange <- llm.Message{Err: errors.WrapPrefix(err, "failed to generate content", 0)}
+				exchange <- llm.Message{Err: errors.WrapPrefix(err, "generate content failed", 0)}
 				continue
 			}
 			if len(chunk.Candidates) == 0 {

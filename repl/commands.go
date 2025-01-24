@@ -108,6 +108,7 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			responseBuffer.WriteString(elem.Text)
 			tokens += elem.TokenCount
 		}
+		fmt.Println()
 		elapsedTime := time.Since(startTime)
 		tokensPerSec := float64(tokens) / math.Max(1, elapsedTime.Seconds())
 		fmt.Printf("[%.2f tokens/s, %.2fs, %d tokens]\n", tokensPerSec, elapsedTime.Seconds(), tokens)

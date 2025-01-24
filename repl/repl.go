@@ -67,6 +67,7 @@ func New(config configuration.Configuration, provider llm.ProviderIfc) (*ReplCon
 
 func (replCtx *ReplContext) SetModel(modelName string) error {
 	replCtx.modelName = modelName
+	replCtx.UpdatePrompt()
 	return nil
 }
 
