@@ -26,6 +26,8 @@ const (
 	RoleUser = "user"
 	// RoleAssistant is 'assistant'
 	RoleAssistant = "assistant"
+	// RoleDeveloper is 'developer
+	RoleDeveloper = "developer"
 
 	// HeaderAuthorization is where OpenAI looks for the OpenAI API Key
 	HeaderAuthorization = "Authorization"
@@ -108,6 +110,12 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 			Role:    p.ToProviderRole(v.Role),
 		}
 	}))
+	if developerMessage := p.config.String(keys.OptionSystemPrompt); developerMessage != "" {
+		messages = append([]openaimodels.Message{{
+			Content: developerMessage,
+			Role:    RoleDeveloper,
+		}}, messages...)
+	}
 	chatCompletionRequest := openaimodels.CreateChatCompletionRequest{
 		Model:    input.ModelName,
 		Messages: messages,

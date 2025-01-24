@@ -33,7 +33,23 @@ The program will look for a configuration file in the local directory named `.jc
 ```
 provider="gemini"
 model="gemini-1.5-flash-8b"
+
 gemini-api-key="..."
+gemini-models-list=[
+  "gemini-1.5",
+  "gemini-1.5-flash-8b",
+  "gemini-2.0-flash-exp",
+  "gemini-2.0-flash-thinking-exp", 
+]
+
+openai-base-url=https://api.openai.com/v1
+openai-api-key="..."
+openai-models-list=[
+  "gpt-4o",
+  "o1-mini",
+  "o1-preview",
+]
+
 
 system-prompt="""
 Talk like a pirate.
