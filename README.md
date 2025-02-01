@@ -3,7 +3,9 @@
 ![jcllm screencast](https://binaries.jchengdev.org/i/jcllm-0002.gif)
 
 
-For developers who live in the terminal, `jcllm` offers a convenient and efficient way to access large language models. While web interfaces like ChatGPT are powerful, `jcllm` provides a streamlined alternative for quick queries and tasks without leaving the command line. This tool prioritizes responsiveness, delivering results in seconds when configured to use fast models.
+For developers who live in the terminal, `jcllm` offers a convenient and efficient way to access large language models. While web interfaces like ChatGPT are powerful, `jcllm` provides a streamlined alternative for quick queries.
+
+The other principle of `jcllm` is simplicity. It is offered as a simple executable for all major operating systems. You do not need Python, NodeJS, or Docker to install it. Just download and run. Try it out and let me know what you think!
 
 # Installation
 
