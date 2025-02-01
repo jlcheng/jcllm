@@ -82,6 +82,10 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			Role: llm.RoleUser,
 			Text: replCtx.inputBuffer.String(),
 		})
+		// Reset the input states as soon as possible, since there are multiple places where this method might return early
+		if err := replCtx.ResetInput(); err != nil {
+			return errors.WrapPrefix(err, "input reset failed", 0)
+		}
 
 		resp, err := replCtx.provider.SolicitResponse(context.Background(), llm.SolicitResponseInput{
 			ModelName: replCtx.modelName,
@@ -91,7 +95,14 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			Args: replCtx.solicitResponseArgs,
 		})
 		if err != nil {
-			return fmt.Errorf("llm client error: %w", err)
+			// We allow users to append mentions at the end of the input, e.g., "What happened today. @ground". This means an input with
+			// only mentions appear blank _after_ preprocessing. Thus, we need to handle blank inputs again here.
+			// Maybe using mentions as a UI element is not a good idea?
+			if errors.Is(err, llm.ErrBlankInput) {
+				session.Entries = session.Entries[:len(session.Entries)-1]
+				return nil
+			}
+			return errors.WrapPrefix(err, "request to llm failed", 0)
 		}
 		var responseBuffer strings.Builder
 
@@ -117,9 +128,6 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 			Role: llm.RoleAssistant,
 			Text: responseBuffer.String(),
 		})
-		if err := replCtx.ResetInput(); err != nil {
-			return fmt.Errorf("input reset error: %w", err)
-		}
 		return nil
 	})
 }

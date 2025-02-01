@@ -102,7 +102,10 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 	response := llm.ResponseStream{
 		Role: p.ToGenericRole(RoleModel),
 	}
-	tools := p.handleGroundingSupport(input, nil)
+	tools, conversationModified := p.handleGroundingSupport(input, make([]*genai.Tool, 0))
+	if conversationModified && input.Conversation.Entries[len(input.Conversation.Entries)-1].Text == "" {
+		return llm.ResponseStream{}, llm.ErrBlankInput
+	}
 	contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
 		return &genai.Content{
 			Parts: []*genai.Part{{Text: v.Text}},
@@ -128,12 +131,7 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 
 		buf := new(strings.Builder)
 		for _, part := range resp.Content.Parts {
-			if text, ok := mapToText(part); ok {
-				buf.WriteString(text)
-			} else {
-				p.logger.Debugf("unknown part type: %+v", *part)
-				return llm.Message{}, errors.Errorf("unknown part type: %+v", *part)
-			}
+			buf.WriteString(mapToText(part))
 		}
 
 		if resp.GroundingMetadata != nil && resp.GroundingMetadata.GroundingChunks != nil && len(resp.GroundingMetadata.GroundingChunks) != 0 {
@@ -153,14 +151,17 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 	return response, nil
 }
 
-func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools []*genai.Tool) []*genai.Tool {
+func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools []*genai.Tool) ([]*genai.Tool, bool) {
 	conversation := input.Conversation
 	if len(conversation.Entries) == 0 || input.Args[keys.ArgNameSuppress] == keys.True {
-		return tools
+		return tools, false
 	}
 	groundWithSearch := false
 	lastEntry := &conversation.Entries[len(conversation.Entries)-1]
 	newText, mentions := extract.MentionsFromEnd(lastEntry.Text)
+	if newText == lastEntry.Text {
+		return tools, false
+	}
 	for _, mention := range mentions {
 		if mention == "ground" {
 			groundWithSearch = true
@@ -178,9 +179,9 @@ func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools 
 		} else {
 			searchTool.GoogleSearchRetrieval = &genai.GoogleSearchRetrieval{}
 		}
-		return append(tools, searchTool)
+		return append(tools, searchTool), true
 	}
-	return tools
+	return tools, true
 }
 
 func getTokenCount(chunk *genai.GenerateContentResponse) int {
@@ -190,27 +191,27 @@ func getTokenCount(chunk *genai.GenerateContentResponse) int {
 	return int(*chunk.UsageMetadata.CandidatesTokenCount)
 }
 
-func mapToText(part *genai.Part) (string, bool) {
+func mapToText(part *genai.Part) string {
 	if part.InlineData != nil {
-		return fmt.Sprintf("(inline-data type: %s)\n", part.InlineData.MIMEType), true
+		return fmt.Sprintf("(inline-data type: %s)\n", part.InlineData.MIMEType)
 	} else if part.FunctionResponse != nil {
 		return fmt.Sprintf("(function-response name: %s id: %s)\n",
-			part.FunctionResponse.Name, part.FunctionResponse.ID), true
+			part.FunctionResponse.Name, part.FunctionResponse.ID)
 	} else if part.FunctionCall != nil {
 		return fmt.Sprintf("(function-call name: %s id: %s)\n",
-			part.FunctionCall.Name, part.FunctionCall.ID), true
+			part.FunctionCall.Name, part.FunctionCall.ID)
 	} else if part.FileData != nil {
-		return fmt.Sprintf("(file-data uri: %s)\n", part.FileData.FileURI), true
+		return fmt.Sprintf("(file-data uri: %s)\n", part.FileData.FileURI)
 	} else if part.ExecutableCode != nil {
 		return fmt.Sprintf("(executable-code lang: %s, code: %s)\n",
-			part.ExecutableCode.Language, part.ExecutableCode.Code), true
+			part.ExecutableCode.Language, part.ExecutableCode.Code)
 	} else if part.CodeExecutionResult != nil {
-		return fmt.Sprintf("(code-execution-result output: %s)\n", part.CodeExecutionResult.Output), true
+		return fmt.Sprintf("(code-execution-result output: %s)\n", part.CodeExecutionResult.Output)
 	} else if part.VideoMetadata != nil {
 		return fmt.Sprintf("(video-meta start: %s end: %s)\n",
-			part.VideoMetadata.StartOffset, part.VideoMetadata.StartOffset), true
+			part.VideoMetadata.StartOffset, part.VideoMetadata.StartOffset)
 	}
-	return part.Text, true
+	return part.Text
 }
 
 func harmBlockNone() []*genai.SafetySetting {

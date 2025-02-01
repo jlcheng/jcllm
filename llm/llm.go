@@ -66,7 +66,5 @@ const (
 	RoleAssistant = "RoleAssistant"
 )
 
-var ErrNoSupport = errors.New("this model does not support the requested feature")
 var ErrProviderNotFound = errors.New("provider not found")
-var ErrModelNotFound = errors.New("model not found")
-var ErrAPIKeyInvalid = errors.New("api key invalid")
+var ErrBlankInput = errors.New("no input")
