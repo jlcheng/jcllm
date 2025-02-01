@@ -94,7 +94,7 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 	conversation := input.Conversation
 	sdkClient, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  p.config.String(keys.OptionGeminiApiKey),
-		Backend: genai.BackendGoogleAI,
+		Backend: genai.BackendGeminiAPI,
 	})
 	if err != nil {
 		return llm.ResponseStream{}, errors.WrapPrefix(err, "gemini client creation failed", 0)
@@ -198,10 +198,10 @@ func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools 
 }
 
 func getTokenCount(chunk *genai.GenerateContentResponse) int {
-	if chunk == nil || chunk.UsageMetadata == nil {
+	if chunk == nil || chunk.UsageMetadata == nil || chunk.UsageMetadata.CachedContentTokenCount == nil {
 		return 0
 	}
-	return int(chunk.UsageMetadata.CandidatesTokenCount)
+	return int(*chunk.UsageMetadata.CandidatesTokenCount)
 }
 
 func mapToText(part *genai.Part) (string, bool) {

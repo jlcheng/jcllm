@@ -14,7 +14,7 @@ require (
 	github.com/maxbrunsfeld/counterfeiter/v6 v6.11.2
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/tools v0.28.0
-	google.golang.org/genai v0.0.1
+	google.golang.org/genai v0.1.0
 )
 
 require (
@@ -28,7 +28,6 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
-	github.com/stretchr/testify v1.9.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
