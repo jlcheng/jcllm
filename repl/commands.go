@@ -2,12 +2,13 @@ package repl
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/go-errors/errors"
 
 	"github.com/jlcheng/jcllm/configuration/keys"
 	"github.com/jlcheng/jcllm/dye"
@@ -96,17 +97,17 @@ func NewSubmitCmd(replCtx *ReplContext) CmdIfc {
 
 		tokens := 0
 		fmt.Println(dye.Strf("[%s]:", replCtx.modelName).Bold().Yellow())
-		for elem := range resp.ResponseStream {
-			if elem.Err != nil {
-				if errors.Is(elem.Err, io.EOF) {
+		for message, err := range resp.Messages {
+			if err != nil {
+				if errors.Is(err, io.EOF) {
 					break
 				}
-				return fmt.Errorf("response stream error: %w", elem.Err)
+				return errors.WrapPrefix(err, "error read from llm stream", 0)
 			}
 			// Print out each token as soon as it arrives
-			fmt.Print(elem.Text)
-			responseBuffer.WriteString(elem.Text)
-			tokens += elem.TokenCount
+			fmt.Print(message.Text)
+			responseBuffer.WriteString(message.Text)
+			tokens += message.TokenCount
 		}
 		fmt.Println()
 		elapsedTime := time.Since(startTime)

@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"iter"
 )
 
 //go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -generate
@@ -49,14 +50,13 @@ type (
 	}
 
 	ResponseStream struct {
-		Role           string
-		ResponseStream <-chan Message
+		Role     string
+		Messages iter.Seq2[Message, error]
 	}
 
 	Message struct {
 		TokenCount int
 		Text       string
-		Err        error
 	}
 )
 

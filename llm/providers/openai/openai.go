@@ -99,10 +99,8 @@ func (p *Provider) ListModels(ctx context.Context) ([]llm.ModelInfo, error) {
 }
 
 func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitResponseInput) (llm.ResponseStream, error) {
-	exchange := make(chan llm.Message)
 	response := llm.ResponseStream{
-		Role:           RoleAssistant,
-		ResponseStream: exchange,
+		Role: RoleAssistant,
 	}
 	messages := slices.Collect(it.Map(slices.Values(input.Conversation.Entries), func(v llm.ChatEntry) openaimodels.Message {
 		return openaimodels.Message{
@@ -139,7 +137,8 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 	if err != nil {
 		return response, errors.WrapPrefix(err, "chat completions request submission failed", 0)
 	}
-	go func() {
+
+	response.Messages = func(yield func(llm.Message, error) bool) {
 		scanner := bufio.NewScanner(body)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -152,25 +151,23 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 			}
 			var chunk openaimodels.ChatCompletionChunkResponse
 			if err := json.Unmarshal([]byte(lineMessage), &chunk); err != nil {
-				exchange <- llm.Message{
-					Err: errors.WrapPrefix(err, "unmarshal response failed", 0),
+				if !yield(llm.Message{}, errors.WrapPrefix(err, "unmarshal response failed", 0)) {
+					return
 				}
 				break
 			}
 			if len(chunk.Choices) != 0 {
-				exchange <- llm.Message{
-					Text: chunk.Choices[0].Delta.Content,
-					Err:  nil,
+				if !yield(llm.Message{Text: chunk.Choices[0].Delta.Content}, nil) {
+					return
 				}
 			}
 			if chunk.Usage != nil {
-				exchange <- llm.Message{
-					TokenCount: chunk.Usage.CompletionTokens,
+				if !yield(llm.Message{TokenCount: chunk.Usage.CompletionTokens}, nil) {
+					return
 				}
 			}
 		}
-		close(exchange)
-	}()
+	}
 	return response, nil
 }
 

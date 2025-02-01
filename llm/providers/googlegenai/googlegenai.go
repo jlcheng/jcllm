@@ -99,71 +99,57 @@ func (p *Provider) SolicitResponse(ctx context.Context, input llm.SolicitRespons
 	if err != nil {
 		return llm.ResponseStream{}, errors.WrapPrefix(err, "gemini client creation failed", 0)
 	}
-	exchange := make(chan llm.Message)
 	response := llm.ResponseStream{
-		Role:           p.ToGenericRole(RoleModel),
-		ResponseStream: exchange,
+		Role: p.ToGenericRole(RoleModel),
 	}
-	go func() {
-		tools := p.handleGroundingSupport(input, nil)
-		contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
-			return &genai.Content{
-				Parts: []*genai.Part{{Text: v.Text}},
-				Role:  p.ToProviderRole(v.Role),
-			}
-		}))
-		groundingDataBuffer := new(strings.Builder)
-		for chunk, err := range sdkClient.Models.GenerateContentStream(ctx, input.ModelName, contents, &genai.GenerateContentConfig{
-			SystemInstruction: genai.Text(p.config.String(keys.OptionSystemPrompt))[0],
-			Tools:             tools,
-			SafetySettings:    harmBlockNone(),
-		}) {
-			if err != nil {
-				exchange <- llm.Message{Err: errors.WrapPrefix(err, "generate content failed", 0)}
-				continue
-			}
-			if len(chunk.Candidates) == 0 {
-				continue
-			}
-			resp := chunk.Candidates[0]
-			if resp.FinishReason != "" && resp.FinishReason != genai.FinishReasonStop {
-				exchange <- llm.Message{Err: errors.Errorf("model stopped: %s", resp.FinishReason)}
-				continue
-			}
-			if resp.Content == nil {
-				continue
-			}
-			if resp.GroundingMetadata != nil && resp.GroundingMetadata.GroundingChunks != nil {
-				for _, chunk := range resp.GroundingMetadata.GroundingChunks {
-					if chunk.Web != nil {
-						fmt.Fprintf(groundingDataBuffer, "[%s](%s)\n", chunk.Web.Title, chunk.Web.URI)
-					}
-				}
-			}
-			buf := new(strings.Builder)
-			for _, part := range resp.Content.Parts {
-				if text, ok := mapToText(part); ok {
-					buf.WriteString(text)
-				} else {
-					p.logger.Debugf("unknown part type: %+v", *part)
-					exchange <- llm.Message{Err: fmt.Errorf("unknown part type: %s", part.Text)}
-					break
-				}
-			}
-			exchange <- llm.Message{
-				TokenCount: getTokenCount(chunk),
-				Text:       buf.String(),
-				Err:        nil,
-			}
-			buf.Reset()
+	tools := p.handleGroundingSupport(input, nil)
+	contents := slices.Collect(it.Map(slices.Values(conversation.Entries), func(v llm.ChatEntry) *genai.Content {
+		return &genai.Content{
+			Parts: []*genai.Part{{Text: v.Text}},
+			Role:  p.ToProviderRole(v.Role),
 		}
-		if groundingDataBuffer.Len() > 0 {
-			exchange <- llm.Message{
-				Text: fmt.Sprintf("\n\n%s\n", strings.TrimSpace(groundingDataBuffer.String())),
+	}))
+	sdkResponse := sdkClient.Models.GenerateContentStream(ctx, input.ModelName, contents, &genai.GenerateContentConfig{
+		SystemInstruction: genai.Text(p.config.String(keys.OptionSystemPrompt))[0],
+		Tools:             tools,
+		SafetySettings:    harmBlockNone(),
+	})
+	response.Messages = it.Map2(sdkResponse, func(chunk *genai.GenerateContentResponse, err error) (llm.Message, error) {
+		if err != nil {
+			return llm.Message{}, errors.WrapPrefix(err, "generate content failed", 0)
+		}
+		if chunk == nil || chunk.Candidates == nil || len(chunk.Candidates) == 0 {
+			return llm.Message{}, nil
+		}
+		resp := chunk.Candidates[0]
+		if resp.FinishReason != "" && resp.FinishReason != genai.FinishReasonStop {
+			return llm.Message{}, errors.Errorf("model stopped: %s", resp.FinishReason)
+		}
+
+		buf := new(strings.Builder)
+		for _, part := range resp.Content.Parts {
+			if text, ok := mapToText(part); ok {
+				buf.WriteString(text)
+			} else {
+				p.logger.Debugf("unknown part type: %+v", *part)
+				return llm.Message{}, errors.Errorf("unknown part type: %+v", *part)
 			}
 		}
-		close(exchange)
-	}()
+
+		if resp.GroundingMetadata != nil && resp.GroundingMetadata.GroundingChunks != nil && len(resp.GroundingMetadata.GroundingChunks) != 0 {
+			mustFprintf(buf, "Citations:\n")
+			for _, chunk := range resp.GroundingMetadata.GroundingChunks {
+				if chunk.Web != nil {
+					mustFprintf(buf, "  [%s](%s)\n", chunk.Web.Title, chunk.Web.URI)
+				}
+			}
+		}
+
+		return llm.Message{
+			TokenCount: getTokenCount(chunk),
+			Text:       buf.String(),
+		}, nil
+	})
 	return response, nil
 }
 
@@ -198,16 +184,14 @@ func (p *Provider) handleGroundingSupport(input llm.SolicitResponseInput, tools 
 }
 
 func getTokenCount(chunk *genai.GenerateContentResponse) int {
-	if chunk == nil || chunk.UsageMetadata == nil || chunk.UsageMetadata.CachedContentTokenCount == nil {
+	if chunk == nil || chunk.UsageMetadata == nil || chunk.UsageMetadata.CandidatesTokenCount == nil {
 		return 0
 	}
 	return int(*chunk.UsageMetadata.CandidatesTokenCount)
 }
 
 func mapToText(part *genai.Part) (string, bool) {
-	if part.Text != "" {
-		return part.Text, true
-	} else if part.InlineData != nil {
+	if part.InlineData != nil {
 		return fmt.Sprintf("(inline-data type: %s)\n", part.InlineData.MIMEType), true
 	} else if part.FunctionResponse != nil {
 		return fmt.Sprintf("(function-response name: %s id: %s)\n",
@@ -226,7 +210,7 @@ func mapToText(part *genai.Part) (string, bool) {
 		return fmt.Sprintf("(video-meta start: %s end: %s)\n",
 			part.VideoMetadata.StartOffset, part.VideoMetadata.StartOffset), true
 	}
-	return "", false
+	return part.Text, true
 }
 
 func harmBlockNone() []*genai.SafetySetting {
@@ -242,6 +226,13 @@ func harmBlockNone() []*genai.SafetySetting {
 			Threshold: genai.HarmBlockThresholdBlockNone,
 		}
 	}))
+}
+
+func mustFprintf(w io.Writer, format string, args ...interface{}) {
+	_, err := fmt.Fprintf(w, format, args...)
+	if err != nil {
+		panic(err)
+	}
 }
 
 type ModelInfo struct {
